@@ -115,7 +115,7 @@ client.on("messageCreate", async (message) => {
     // 1. 순수 PCM 데이터는 헤더가 없으므로 Node.js에서 직접 단순 병합(Byte Append)하는 것이 가장 안전합니다.
     const tempPcm = "./recordings/merged.pcm";
     const mergedWriteStream = fs.createWriteStream(tempPcm);
-    
+
     // 조각난 PCM 파일들을 하나로 이어 붙입니다.
     for (const file of files) {
       const filePath = path.join(recordingsDir, file);
@@ -142,14 +142,18 @@ client.on("messageCreate", async (message) => {
         })
         .on("end", async () => {
           try {
-            console.log("오디오 변환(압축) 완료! 구글 File API 업로드 및 제미나이 요약 시작...");
+            console.log(
+              "오디오 변환(압축) 완료! 구글 File API 업로드 및 제미나이 요약 시작...",
+            );
             const summary = await summarizeWithGemini(outputMedia);
 
             console.log("요약 결과:\n", summary);
             if (DATABASE_ID) {
               await recordToNotionDirect(summary);
             } else {
-              console.log("⚠️ .env에 BJ_NOTION_DATABASE_ID가 없어서 노션 기록을 생략합니다.");
+              console.log(
+                "⚠️ .env에 BJ_NOTION_DATABASE_ID가 없어서 노션 기록을 생략합니다.",
+              );
             }
 
             const replyText =
@@ -157,7 +161,8 @@ client.on("messageCreate", async (message) => {
                 ? summary.substring(0, 1900) + "..."
                 : summary;
             message.reply(
-              "✅ 제미나이 요약 및 클라우드 업로드가 완료되었습니다!\n\n" + replyText,
+              "✅ 제미나이 요약 및 클라우드 업로드가 완료되었습니다!\n\n" +
+                replyText,
             );
           } catch (error) {
             console.error("요약 중 에러 발생:", error);
@@ -190,13 +195,32 @@ async function summarizeWithGemini(filePath) {
   console.log("업로드 완료 URI:", uploadResult.file.uri);
 
   // 2. 업로드된 파일 주소(URI)를 사용하여 텍스트 요약 요청 (메모리 부족 에러 방지)
+  const meetingPrompt = `
+이 음성 파일은 IT 개발팀의 회의 내용이야. 
+
+[요약 지침]
+1. 회의의 핵심 주제를 한 줄로 요약해줘.
+2. 논의된 결정 사항들을 불렛 포인트로 정리해줘.
+3. 이신지, 송수빈, 이은석, 김영철 등 언급된 담당자별로 직무와 할 일을 표 형태로 정리해줘.
+4. 전체적인 특이사항이 있다면 마지막에 짧게 적어줘.
+
+[필터링 규칙]
+5. 안부 인사, 농담, 식사 메뉴 결정 등 사적인 대화는 요약에서 완전히 제외해줘. 
+- 단, 사담 과정에서 나온 업무 아이디어나 진행 상황은 놓치지 마.
+6. 오직 '북잡' 서비스 개발, 운영, 업무 일정과 관련된 핵심 정보만 추출해줘.
+7. 회의 전체가 사적인 대화뿐이라면 '업무 관련 논의 사항 없음'이라고 짧게 기록해줘.
+
+[출력 언어]
+8. 모든 내용은 한국어로 작성해줘.
+`;
+
   const result = await model.generateContent([
-    "이 음성 파일은 IT 개발팀의 회의 내용이야. 한국어로 1. 주제 2. 결정사항 3. 담당자별 할 일을 깔끔하게 요약해줘.",
-    { 
-      fileData: { 
-        fileUri: uploadResult.file.uri, 
-        mimeType: uploadResult.file.mimeType 
-      } 
+    meetingPrompt,
+    {
+      fileData: {
+        fileUri: uploadResult.file.uri,
+        mimeType: uploadResult.file.mimeType,
+      },
     },
   ]);
 
@@ -220,6 +244,7 @@ async function recordToNotionDirect(summaryText) {
         : summaryText;
 
     const response = await notion.pages.create({
+      // <- 이부분 중요 개인의 노션 데이터베이스 맞게 수정해야함
       parent: { database_id: DATABASE_ID },
       properties: {
         // 1. "Meeting name" 컬럼 (텍스트)
