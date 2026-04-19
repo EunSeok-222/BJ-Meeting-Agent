@@ -32,6 +32,7 @@ let isRecording = false;
 const activeStreams = new Map();
 const userNames = new Map(); // userId -> displayName 캐시
 let currentMeetingParticipants = new Set(); // 현재 회의 참여자 목록
+let lastSummary = ""; // 마지막으로 생성된 요약본 저장
 
 const client = new Client({
   intents: [
@@ -225,8 +226,10 @@ client.on("messageCreate", async (message) => {
             );
 
             console.log("요약 결과:\n", summary);
+            lastSummary = summary; // 마지막 요약본 저장
+
             if (DATABASE_ID) {
-              await recordToNotionDirect(summary);
+              await recordToNotionDirect(summary, message);
             } else {
               console.log(
                 "⚠️ .env에 BJ_NOTION_DATABASE_ID가 없어서 노션 기록을 생략합니다.",
@@ -252,6 +255,22 @@ client.on("messageCreate", async (message) => {
         })
         .run();
     });
+  }
+
+  // 3. 마지막 요약본 노션 재전송 명령어
+  if (message.content === "/노션재전송") {
+    if (!lastSummary) return message.reply("재전송할 요약본이 없습니다.");
+    message.reply("🔄 마지막 요약본을 노션으로 다시 전송합니다...");
+    await recordToNotionDirect(lastSummary, message);
+  }
+
+  // 4. 수동 텍스트 노션 저장 명령어 (/노션저장 [내용])
+  if (message.content.startsWith("/노션저장")) {
+    const content = message.content.replace("/노션저장", "").trim();
+    if (!content) return message.reply("저장할 내용을 입력해 주세요. 예: `/노션저장 회의 요약 내용...` ");
+    
+    message.reply("🔄 입력하신 내용을 노션으로 전송합니다...");
+    await recordToNotionDirect(content, message);
   }
 });
 
@@ -302,7 +321,7 @@ ${participantsStr}
 [필터링 규칙]
 5. 안부 인사, 농담, 식사 메뉴 결정 등 사적인 대화는 요약에서 완전히 제외해줘. 
 - 단, 사담 과정에서 나온 업무 아이디어나 진행 상황은 놓치지 마.
-6. 오직 '북잡' 서비스 개발, 운영, 업무 일정과 관련된 핵심 정보만 추출해줘.
+6. 오직 서비스 개발, 운영, 업무 일정과 관련된 핵심 정보만 추출해줘.
 7. 회의 전체가 사적인 대화뿐이라면 '업무 관련 논의 사항 없음'이라고 짧게 기록해줘.
 
 [출력 언어]
@@ -330,52 +349,59 @@ ${participantsStr}
   return result.response.text();
 }
 
-async function recordToNotionDirect(summaryText) {
+async function recordToNotionDirect(summaryText, message = null) {
   try {
-    // 노션은 한 블록에 텍스트 길이 제한(2000자)이 있으므로 안전하게 자릅니다.
-    const safeText =
-      summaryText.length > 2000
-        ? summaryText.substring(0, 2000) + "\n\n(내용이 너무 길어 일부 생략됨)"
-        : summaryText;
+    // 노션은 한 블록에 텍스트 길이 제한(2000자)이 있으므로 2000자 단위로 나눕니다.
+    const chunks = [];
+    for (let i = 0; i < summaryText.length; i += 2000) {
+      chunks.push(summaryText.substring(i, i + 2000));
+    }
+
+    const children = [
+      {
+        object: "block",
+        type: "heading_2",
+        heading_2: {
+          rich_text: [{ type: "text", text: { content: "🤖 AI 요약본" } }],
+        },
+      },
+    ];
+
+    // 각 청크를 별도의 단락 블록으로 추가
+    chunks.forEach((chunk) => {
+      children.push({
+        object: "block",
+        type: "paragraph",
+        paragraph: {
+          rich_text: [{ type: "text", text: { content: chunk } }],
+        },
+      });
+    });
 
     const response = await notion.pages.create({
       parent: { database_id: DATABASE_ID },
       properties: {
-        // 1. "Meeting name" 컬럼 (텍스트) // <- 이부분 중요 개인의 노션 데이터베이스 맞게 수정해야함
         "Meeting name": {
           title: [
             { text: { content: `${new Date().toLocaleDateString()} 회의록` } },
           ],
         },
-        // 2. "회의 진행일" 컬럼 (날짜)
         "회의 진행일": {
           date: { start: new Date().toISOString().split("T")[0] },
         },
-        // 3. "Category" 컬럼 (선택 - '전체 회의'로 고정)
         Category: {
           multi_select: [{ name: "전체 회의" }],
         },
-        // Attendees(참석자)는 나중에 멤버 ID를 매핑해서 자동화할 수 있습니다!
       },
-      children: [
-        {
-          object: "block",
-          type: "heading_2",
-          heading_2: {
-            rich_text: [{ type: "text", text: { content: "🤖 AI 요약본" } }],
-          },
-        },
-        {
-          object: "block",
-          type: "paragraph",
-          paragraph: {
-            rich_text: [{ type: "text", text: { content: safeText } }],
-          },
-        },
-      ],
+      children: children,
     });
     console.log("북잡 회의록 업데이트 완료!");
+    if (message) message.reply("✅ 노션 전송이 완료되었습니다!");
   } catch (error) {
     console.error("노션 전송 실패:", error.body ? error.body : error);
+    if (message)
+      message.reply(
+        "❌ 노션 전송에 실패했습니다. 로그를 확인하거나 `/노션재전송`을 시도해 보세요.",
+      );
   }
 }
