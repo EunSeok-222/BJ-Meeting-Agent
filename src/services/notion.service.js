@@ -31,7 +31,9 @@ function parseRichText(text) {
   while ((match = boldRegex.exec(text)) !== null) {
     // 볼드체 이전의 일반 텍스트 추가
     if (match.index > lastIndex) {
-      parts.push(...createRichTextChunks(text.substring(lastIndex, match.index)));
+      parts.push(
+        ...createRichTextChunks(text.substring(lastIndex, match.index)),
+      );
     }
     // 볼드체 텍스트 추가
     parts.push(...createRichTextChunks(match[1], { bold: true }));
@@ -79,7 +81,9 @@ function markdownLineToBlock(line) {
   }
   // Bulleted List Item
   if (line.startsWith("* ") || line.startsWith("- ")) {
-    const content = line.startsWith("* ") ? line.replace("* ", "") : line.replace("- ", "");
+    const content = line.startsWith("* ")
+      ? line.replace("* ", "")
+      : line.replace("- ", "");
     return {
       object: "block",
       type: "bulleted_list_item",
@@ -104,13 +108,50 @@ function markdownLineToBlock(line) {
   };
 }
 
-async function recordToNotionDirect(summaryText, message = null) {
+// 사용자 이름과 노션 User ID 매핑 (보안을 위해 .env에서 로드)
+const USER_MAPPING = process.env.NOTION_USER_MAPPING 
+  ? JSON.parse(process.env.NOTION_USER_MAPPING) 
+  : {};
+
+async function recordToNotionDirect(
+  summaryText,
+  participants = [],
+  message = null,
+) {
   if (!DATABASE_ID) {
-    console.log("⚠️ .env에 BJ_NOTION_DATABASE_ID가 없어서 노션 기록을 생략합니다.");
+    console.log(
+      "⚠️ .env에 BJ_NOTION_DATABASE_ID가 없어서 노션 기록을 생략합니다.",
+    );
     return;
   }
 
   try {
+    // 1. 카테고리 판별 로직
+    let category = "전체 회의";
+    const pSet = new Set(participants);
+
+    if (participants.length === 2) {
+      if (pSet.has("이은석") && (pSet.has("송수빈") || pSet.has("수빈 송"))) {
+        category = "프론트 회의";
+      } else if (
+        pSet.has("이신지") &&
+        (pSet.has("김영철") || pSet.has("peng"))
+      ) {
+        category = "백엔드 회의";
+      }
+    } else if (participants.length >= 4) {
+      category = "전체 회의";
+    }
+
+    // 2. 참석자(Attendees) ID 매핑
+    const attendeeIds = [];
+    for (const name of participants) {
+      const id = USER_MAPPING[name];
+      if (id) {
+        attendeeIds.push({ id });
+      }
+    }
+
     const lines = summaryText.split("\n");
     const children = [
       {
@@ -129,26 +170,39 @@ async function recordToNotionDirect(summaryText, message = null) {
       }
     }
 
-    await notion.pages.create({
-      parent: { database_id: DATABASE_ID },
-      properties: {
-        "Meeting name": {
-          title: [
-            { text: { content: `${new Date().toLocaleDateString()} 회의록` } },
-          ],
+    // 3. 페이지 생성 요청 (notion.request 사용으로 더 정확한 엔드포인트 공략)
+    await notion.request({
+      path: "pages",
+      method: "POST",
+      body: {
+        parent: { data_source_id: DATABASE_ID },
+        properties: {
+          "Meeting name": {
+            title: [
+              {
+                text: {
+                  content: `${new Date().toLocaleDateString()} AI 회의록`,
+                },
+              },
+            ],
+          },
+          "회의 진행일": {
+            date: { start: new Date().toISOString().split("T")[0] },
+          },
+          Category: {
+            multi_select: [{ name: category }],
+          },
+          Attendees: {
+            people: attendeeIds,
+          },
         },
-        "회의 진행일": {
-          date: { start: new Date().toISOString().split("T")[0] },
-        },
-        Category: {
-          multi_select: [{ name: "전체 회의" }],
-        },
+        children: children.slice(0, 100),
       },
-      children: children.slice(0, 100),
     });
 
-    console.log("북잡 회의록 업데이트 완료!");
-    if (message) message.reply("✅ 노션에 예쁘게 포맷팅되어 전송되었습니다!");
+    console.log(`북잡 회의록 업데이트 완료! (카테고리: ${category})`);
+    if (message)
+      message.reply(`✅ 노션에 [${category}]로 분류되어 전송되었습니다!`);
   } catch (error) {
     console.error("노션 전송 실패:", error.body ? error.body : error);
     if (message)
@@ -159,5 +213,5 @@ async function recordToNotionDirect(summaryText, message = null) {
 }
 
 module.exports = {
-  recordToNotionDirect
+  recordToNotionDirect,
 };
