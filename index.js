@@ -18,8 +18,9 @@ const client = new Client({
 client.once("clientReady", async () => {
   console.log(`성공! ${client.user.tag} 에이전트가 온라인입니다.`);
   
-  // 슬래시 커맨드 등록
-  await registerCommands(process.env.DISCORD_TOKEN, client.user.id);
+  // 슬래시 커맨드 등록 (글로벌 + 현재 접속된 모든 길드에 즉시 등록)
+  const guildIds = client.guilds.cache.map(guild => guild.id);
+  await registerCommands(process.env.DISCORD_TOKEN, client.user.id, guildIds);
 });
 
 // 메시지 수신 시 핸들러 호출 (기존 방식 유지)
