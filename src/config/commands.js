@@ -18,6 +18,9 @@ const commands = [
         .setDescription("노션에 저장할 내용")
         .setRequired(true)
     ),
+  new SlashCommandBuilder()
+    .setName("회의정리재시도")
+    .setDescription("실패했던 회의 음성 파일을 다시 요약하여 노션에 업로드합니다."),
 ].map(command => command.toJSON());
 
 async function registerCommands(token, clientId) {

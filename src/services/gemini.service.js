@@ -1,7 +1,7 @@
 const { genAI, fileManager } = require("../config/clients");
 
 async function summarizeWithGemini(filePath, participants) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   console.log("구글 클라우드에 MP3 파일 업로드 중...");
   const uploadResult = await fileManager.uploadFile(filePath, {
@@ -35,15 +35,36 @@ ${participantsStr}
 8. 모든 내용은 한국어로 작성해줘.
 `;
 
-  const result = await model.generateContent([
-    meetingPrompt,
-    {
-      fileData: {
-        fileUri: uploadResult.file.uri,
-        mimeType: uploadResult.file.mimeType,
-      },
-    },
-  ]);
+  let result;
+  let attempts = 0;
+  const maxAttempts = 3;
+
+  while (attempts < maxAttempts) {
+    try {
+      result = await model.generateContent([
+        meetingPrompt,
+        {
+          fileData: {
+            fileUri: uploadResult.file.uri,
+            mimeType: uploadResult.file.mimeType,
+          },
+        },
+      ]);
+      break; // 성공 시 루프 탈출
+    } catch (error) {
+      attempts++;
+      console.error(
+        `제미나이 요약 시도 ${attempts}/${maxAttempts} 실패:`,
+        error.message,
+      );
+
+      if (attempts >= maxAttempts) throw error; // 마지막 시도도 실패하면 에러 던짐
+
+      const delay = Math.pow(2, attempts) * 1000; // 2s, 4s... 지수 백오프
+      console.log(`${delay / 1000}초 후 다시 시도합니다...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
 
   try {
     await fileManager.deleteFile(uploadResult.file.name);

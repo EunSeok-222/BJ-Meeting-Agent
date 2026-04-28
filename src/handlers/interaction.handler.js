@@ -36,6 +36,13 @@ async function handleInteraction(interaction) {
     const channel = interaction.member.voice.channel;
     if (!channel) return interaction.reply({ content: "먼저 음성 채널에 들어가 주세요!", flags: [MessageFlags.Ephemeral] });
 
+    if (state.lastFailedMeeting) {
+      return interaction.reply({ 
+        content: "⚠️ 이전 회의 요약 실패 데이터가 남아있습니다.\n`/회의정리재시도`를 통해 완료하거나, 파일을 정리한 후 새로운 회의를 시작해 주세요.", 
+        flags: [MessageFlags.Ephemeral] 
+      });
+    }
+
     try {
       const connection = joinVoiceChannel({
         channelId: channel.id,
@@ -158,6 +165,9 @@ async function handleInteraction(interaction) {
       await mergePcmFiles(files, recordingsDir, tempPcm);
       await convertToMp3(tempPcm, outputMedia);
       
+      // PCM 파일은 MP3 변환 직후 삭제하여 용량 확보
+      if (fs.existsSync(tempPcm)) fs.unlinkSync(tempPcm);
+
       const summary = await summarizeWithGemini(outputMedia, participantsList);
       state.lastSummary = summary;
 
@@ -165,16 +175,60 @@ async function handleInteraction(interaction) {
 
       const replyText = summary.length > 1900 ? summary.substring(0, 1900) + "..." : summary;
       await interaction.editReply("✅ 제미나이 요약 및 노션 전송이 완료되었습니다!\n\n" + replyText);
+      
+      // 성공 시 음성 파일 삭제 및 상태 초기화
+      if (fs.existsSync(outputMedia)) fs.unlinkSync(outputMedia);
+      state.lastFailedMeeting = null;
     } catch (error) {
       console.error("처리 중 에러 발생:", error);
-      await interaction.editReply("❌ 회의 요약 중 오류가 발생했습니다.");
+      
+      // 실패 시 정보를 state에 저장 (MP3 파일은 삭제하지 않음)
+      state.lastFailedMeeting = {
+        audioPath: outputMedia,
+        participants: participantsList
+      };
+      
+      await interaction.editReply("❌ 회의 요약 중 오류가 발생했습니다. `/회의정리재시도` 커맨드로 나중에 다시 시도할 수 있습니다.");
     } finally {
       if (fs.existsSync(tempPcm)) fs.unlinkSync(tempPcm);
-      if (fs.existsSync(outputMedia)) fs.unlinkSync(outputMedia);
+      // outputMedia는 성공 시에만 삭제함
     }
   }
 
-  // 3. 노션 재전송
+  // 3. 회의 정리 재시도
+  if (commandName === "회의정리재시도") {
+    if (!state.lastFailedMeeting) {
+      return interaction.reply({ content: "재시도할 실패 내역이 없습니다.", flags: [MessageFlags.Ephemeral] });
+    }
+
+    await interaction.deferReply();
+    const { audioPath, participants } = state.lastFailedMeeting;
+
+    if (!fs.existsSync(audioPath)) {
+      state.lastFailedMeeting = null;
+      return interaction.editReply("❌ 원본 음성 파일을 찾을 수 없습니다. 다시 녹음이 필요합니다.");
+    }
+
+    try {
+      await interaction.editReply("🔄 보존된 음성 파일로 다시 요약 및 노션 전송을 시도합니다...");
+      
+      const summary = await summarizeWithGemini(audioPath, participants);
+      state.lastSummary = summary;
+      await recordToNotionDirect(summary);
+
+      const replyText = summary.length > 1900 ? summary.substring(0, 1900) + "..." : summary;
+      await interaction.editReply("✅ 재시도 성공! 요약 및 노션 전송이 완료되었습니다.\n\n" + replyText);
+
+      // 성공 시 파일 삭제 및 상태 초기화
+      if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
+      state.lastFailedMeeting = null;
+    } catch (error) {
+      console.error("재시도 중 에러 발생:", error);
+      await interaction.editReply("❌ 여전히 오류가 발생합니다. 제미나이 서비스 상태를 확인해 주세요.");
+    }
+  }
+
+  // 4. 노션 재전송
   if (commandName === "노션재전송") {
     if (!state.lastSummary) return interaction.reply({ content: "재전송할 요약본이 없습니다.", flags: [MessageFlags.Ephemeral] });
     await interaction.reply("🔄 마지막 요약본을 노션으로 다시 전송합니다...");
