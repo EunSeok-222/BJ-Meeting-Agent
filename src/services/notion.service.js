@@ -181,7 +181,7 @@ async function recordToNotionDirect(
             title: [
               {
                 text: {
-                  content: `${new Date().toLocaleDateString()} AI 회의록`,
+                  content: `${new Date().toLocaleDateString("ko-KR")} AI 회의록`,
                 },
               },
             ],
