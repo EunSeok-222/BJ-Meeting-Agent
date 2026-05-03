@@ -156,8 +156,9 @@ async function handleMessage(message) {
       
       const summary = await summarizeWithGemini(outputMedia, participantsList);
       state.lastSummary = summary;
+      state.lastParticipants = participantsList;
 
-      await recordToNotionDirect(summary);
+      await recordToNotionDirect(summary, participantsList);
 
       const replyText = summary.length > 1900 ? summary.substring(0, 1900) + "..." : summary;
       message.reply("✅ 제미나이 요약 및 노션 전송이 완료되었습니다!\n\n" + replyText);
@@ -174,7 +175,7 @@ async function handleMessage(message) {
   if (message.content === "/노션재전송") {
     if (!state.lastSummary) return message.reply("재전송할 요약본이 없습니다.");
     message.reply("🔄 마지막 요약본을 노션으로 다시 전송합니다...");
-    await recordToNotionDirect(state.lastSummary);
+    await recordToNotionDirect(state.lastSummary, state.lastParticipants);
     message.reply("✅ 노션 전송이 완료되었습니다!");
   }
 

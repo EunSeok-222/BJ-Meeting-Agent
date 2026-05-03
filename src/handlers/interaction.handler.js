@@ -170,8 +170,9 @@ async function handleInteraction(interaction) {
 
       const summary = await summarizeWithGemini(outputMedia, participantsList);
       state.lastSummary = summary;
+      state.lastParticipants = participantsList;
 
-      await recordToNotionDirect(summary);
+      await recordToNotionDirect(summary, participantsList);
 
       const replyText = summary.length > 1900 ? summary.substring(0, 1900) + "..." : summary;
       await interaction.editReply("✅ 제미나이 요약 및 노션 전송이 완료되었습니다!\n\n" + replyText);
@@ -214,7 +215,8 @@ async function handleInteraction(interaction) {
       
       const summary = await summarizeWithGemini(audioPath, participants);
       state.lastSummary = summary;
-      await recordToNotionDirect(summary);
+      state.lastParticipants = participants;
+      await recordToNotionDirect(summary, participants);
 
       const replyText = summary.length > 1900 ? summary.substring(0, 1900) + "..." : summary;
       await interaction.editReply("✅ 재시도 성공! 요약 및 노션 전송이 완료되었습니다.\n\n" + replyText);
@@ -232,7 +234,7 @@ async function handleInteraction(interaction) {
   if (commandName === "노션재전송") {
     if (!state.lastSummary) return interaction.reply({ content: "재전송할 요약본이 없습니다.", flags: [MessageFlags.Ephemeral] });
     await interaction.reply("🔄 마지막 요약본을 노션으로 다시 전송합니다...");
-    await recordToNotionDirect(state.lastSummary);
+    await recordToNotionDirect(state.lastSummary, state.lastParticipants);
     await interaction.editReply("✅ 노션 전송이 완료되었습니다!");
   }
 

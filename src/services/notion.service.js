@@ -145,11 +145,22 @@ async function recordToNotionDirect(
 
     // 2. 참석자(Attendees) ID 매핑
     const attendeeIds = [];
+    const unmappedNames = [];
+    
     for (const name of participants) {
       const id = USER_MAPPING[name];
       if (id) {
         attendeeIds.push({ id });
+      } else {
+        unmappedNames.push(name);
       }
+    }
+
+    if (unmappedNames.length > 0) {
+      console.log(`⚠️ 다음 참여자들은 Notion 매핑 정보가 없어 제외되었습니다: ${unmappedNames.join(", ")}`);
+    }
+    if (attendeeIds.length > 0) {
+      console.log(`✅ ${attendeeIds.length}명의 참석자가 노션에 등록됩니다.`);
     }
 
     const lines = summaryText.split("\n");
