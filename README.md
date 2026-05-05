@@ -1,6 +1,6 @@
 # NoteFlow AI (Discord to Notion)
 
-> **디스코드 음성 회의를 실시간으로 수집하고, Gemini 1.5 Flash를 이용해 요약한 뒤 노션 데이터베이스에 자동으로 기록하는 에이전트입니다.**
+> **디스코드 음성 회의를 실시간으로 수집하고, Gemini 2.5 Flash를 이용해 요약한 뒤 노션 데이터베이스에 자동으로 기록하는 에이전트입니다.**
 
 "북잡(Bookjob)" 팀의 생산성을 높이기 위해 개발되었으며, 긴 회의 중 발생하는 사담을 필터링하고 핵심 액션 플랜을 도출하는 데 최적화되어 있습니다.
 <img width="800" height="450" alt="Video Project 1 (1)" src="https://github.com/user-attachments/assets/ce892e0c-071a-40c7-84a5-28b8c626fb57" />
