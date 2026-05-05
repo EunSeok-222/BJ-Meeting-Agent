@@ -1,4 +1,4 @@
-# Bookjob AI Scribe (Discord to Notion)
+# NoteFlow AI (Discord to Notion)
 
 > **디스코드 음성 회의를 실시간으로 수집하고, Gemini 1.5 Flash를 이용해 요약한 뒤 노션 데이터베이스에 자동으로 기록하는 에이전트입니다.**
 
