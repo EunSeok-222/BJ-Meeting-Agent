@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ko" class="reveal-full-page">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoteFlow AI · 디스코드 회의 자동 정리 에이전트 발표</title>
+
+<link rel="stylesheet" href="./slides_files/reveal.css">
+<link rel="stylesheet" href="./slides_files/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+
+<style>
+:root{
+  --navy-900:#0A1628; --navy-800:#0F1E38; --panel:#0C1B33;
+  --neon-cyan:#22D3EE; --neon-blue:#3B82F6; --neon-bright:#60A5FA;
+  --text:#E2E8F0; --text-dim:#94A3B8;
+  --glass:rgba(255,255,255,0.04); --glass-border:rgba(96,165,250,0.28);
+  --amber:#F59E0B; --green:#34D399; --pink:#F472B6; --red:#FCA5A5;
+}
+.reveal{ font-family:'Pretendard',-apple-system,sans-serif; font-size:28px; color:var(--text); }
+.reveal .slides{ text-align:left; }
+.reveal .slides section{ height:100%; }
+.reveal-viewport{
+  background:
+    radial-gradient(circle at 15% 0%, rgba(34,211,238,0.10), transparent 45%),
+    radial-gradient(circle at 85% 100%, rgba(59,130,246,0.14), transparent 45%),
+    linear-gradient(160deg,#0A1628 0%,#0C1B33 55%,#0A1628 100%);
+}
+.reveal h1,.reveal h2,.reveal h3{ color:#fff; font-weight:800; letter-spacing:-0.02em; text-transform:none; line-height:1.2; }
+.reveal h1{ font-size:2.4em; } .reveal h2{ font-size:1.4em; margin-bottom:0.4em; } .reveal h3{ font-size:1em; }
+.reveal strong{ color:var(--neon-bright); font-weight:700; }
+.reveal em{ color:var(--neon-cyan); font-style:normal; font-weight:600; }
+.reveal p{ line-height:1.5; }
+.reveal code{ color:#FBBF24; font-size:0.86em; background:rgba(251,191,36,0.1); padding:1px 7px; border-radius:5px; }
+
+.kicker{ display:inline-block; font-size:0.46em; font-weight:800; letter-spacing:0.22em; color:var(--neon-cyan);
+  text-transform:uppercase; margin-bottom:0.4em; padding:5px 13px; border:1px solid var(--glass-border);
+  border-radius:999px; background:var(--glass); }
+.slide-head{ margin-bottom:0.5em; } .slide-head h2{ margin:0; }
+.rule{ height:3px; width:60px; margin:12px 0 20px; background:linear-gradient(90deg,var(--neon-cyan),var(--neon-blue)); border-radius:3px; }
+
+.card{ background:var(--glass); border:1px solid var(--glass-border); border-radius:16px; padding:20px 22px;
+  box-shadow:0 8px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05); backdrop-filter:blur(6px); }
+.card h3{ margin:0 0 8px; color:#fff; }
+.card p,.card li{ color:var(--text-dim); font-size:0.8em; line-height:1.5; }
+.card .big{ color:var(--neon-bright); font-weight:800; font-size:1.6em; display:block; }
+
+.grid{ display:grid; gap:16px; } .g2{ grid-template-columns:1fr 1fr; } .g3{ grid-template-columns:repeat(3,1fr); } .g4{ grid-template-columns:repeat(4,1fr); }
+
+.chip{ display:inline-block; margin:4px 6px 4px 0; padding:7px 14px; border-radius:9px; font-size:0.66em; font-weight:600;
+  background:rgba(59,130,246,0.12); border:1px solid var(--glass-border); color:var(--text); }
+.chip .t{ color:var(--neon-cyan); font-weight:800; margin-right:6px; }
+
+ul.clean{ list-style:none; margin:0; padding:0; }
+ul.clean li{ position:relative; padding:9px 0 9px 28px; font-size:0.82em; line-height:1.4;
+  border-bottom:1px solid rgba(255,255,255,0.06); color:var(--text); }
+ul.clean li:last-child{ border-bottom:none; }
+ul.clean li::before{ content:''; position:absolute; left:4px; top:16px; width:8px; height:8px; border-radius:50%;
+  background:var(--neon-cyan); box-shadow:0 0 10px var(--neon-cyan); }
+
+.num-list{ counter-reset:n; list-style:none; margin:0; padding:0; }
+.num-list li{ counter-increment:n; position:relative; padding:11px 0 11px 52px; font-size:0.78em; line-height:1.4;
+  border-bottom:1px solid rgba(255,255,255,0.06); }
+.num-list li:last-child{ border-bottom:none; }
+.num-list li::before{ content:counter(n,decimal-leading-zero); position:absolute; left:0; top:9px; width:34px; height:34px;
+  border-radius:9px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.78em;
+  color:var(--navy-900); background:linear-gradient(135deg,var(--neon-cyan),var(--neon-blue)); box-shadow:0 4px 14px rgba(34,211,238,0.35); }
+.num-list li b{ color:#fff; } .num-list li span{ color:var(--text-dim); }
+
+.glayout{ display:flex; gap:18px; align-items:stretch; }
+.gleft{ flex:1.3; display:flex; flex-direction:column; gap:12px; }
+.gright{ flex:1; display:flex; flex-direction:column; gap:10px; }
+.gimg{ width:100%; border-radius:12px; border:1px solid var(--glass-border); box-shadow:0 6px 22px rgba(0,0,0,0.4); display:block; }
+.panel{ background:var(--glass); border:1px solid var(--glass-border); border-left:4px solid var(--neon-cyan);
+  border-radius:10px; padding:12px 15px; }
+.panel.p-obs{ border-left-color:var(--neon-cyan); }
+.panel.p-int{ border-left-color:var(--neon-blue); }
+.panel.p-cau{ border-left-color:var(--amber); }
+.panel .ph{ font-size:0.62em; font-weight:800; color:#fff; margin-bottom:5px; letter-spacing:0.02em; }
+.panel .pb{ font-size:0.6em; color:var(--text-dim); line-height:1.45; }
+.panel.p-obs .ph{ color:var(--neon-cyan); } .panel.p-int .ph{ color:var(--neon-bright); } .panel.p-cau .ph{ color:var(--amber); }
+
+table.data{ width:100%; border-collapse:collapse; font-size:0.68em; }
+table.data th{ text-align:left; padding:10px 13px; color:var(--neon-cyan); font-weight:800; border-bottom:2px solid var(--glass-border); }
+table.data td{ padding:9px 13px; border-bottom:1px solid rgba(255,255,255,0.07); color:var(--text); }
+table.data tr td:first-child{ color:var(--text-dim); }
+
+.flow{ display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap; }
+.flow .node{ background:var(--glass); border:1px solid var(--glass-border); border-radius:13px; padding:14px 12px; text-align:center; min-width:120px; }
+.flow .node .ico{ font-size:1.5em; display:block; margin-bottom:5px; }
+.flow .node .t{ font-size:0.58em; font-weight:700; color:#fff; }
+.flow .node .d{ font-size:0.46em; color:var(--text-dim); margin-top:3px; }
+.flow .ar{ color:var(--neon-cyan); font-size:1.3em; }
+
+.trouble{ display:flex; gap:12px; align-items:flex-start; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06); font-size:0.66em; }
+.trouble:last-child{ border-bottom:none; }
+.trouble .p{ color:var(--red); font-weight:700; flex:1.3; } .trouble .s{ color:var(--neon-cyan); font-weight:700; flex:1; }
+.trouble .arrow{ color:var(--text-dim); align-self:center; }
+
+.reveal .progress{ color:var(--neon-cyan); height:4px; }
+.reveal .slide-number{ background:transparent; color:var(--text-dim); font-size:13px; }
+.footer-brand{ position:fixed; bottom:14px; left:24px; font-size:12px; color:var(--text-dim); letter-spacing:0.1em; z-index:30; }
+.footer-brand b{ color:var(--neon-cyan); }
+
+.intro-slide{ text-align:center !important; }
+.brand-reveal{ opacity:0; transform:translateY(20px); animation:rise 1s ease 0.3s forwards; }
+.brand-reveal h1{ font-size:3.2em; margin:0; background:linear-gradient(120deg,#fff 20%,var(--neon-cyan) 60%,var(--neon-blue));
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; filter:drop-shadow(0 0 30px rgba(34,211,238,0.3)); }
+.sub-reveal{ opacity:0; animation:rise 1s ease 0.8s forwards; }
+.sub-reveal p{ color:var(--text-dim); font-size:0.86em; margin:10px 0 0; letter-spacing:0.04em; }
+@keyframes rise{ to{ opacity:1; transform:translateY(0); } }
+.hint{ position:fixed; bottom:20px; right:26px; font-size:12px; color:var(--text-dim); opacity:0; animation:rise 1s ease 1.4s forwards; }
+
+.bot-icon{ font-size:5.5em; opacity:0; transform:scale(0.85); animation:pop 0.7s cubic-bezier(.2,1.4,.4,1) 0s forwards; filter:drop-shadow(0 0 26px rgba(34,211,238,0.45)); }
+@keyframes pop{ to{ opacity:1; transform:scale(1); } }
+</style>
+</head>
+<body class="reveal-viewport">
+<div class="reveal">
+<div class="slides">
+
+<!-- 1. 인트로 -->
+<section data-background-color="#0A1628" class="intro-slide">
+  <div class="bot-icon">🗒️</div>
+  <div class="brand-reveal"><h1>NoteFlow AI</h1></div>
+  <div class="sub-reveal">
+    <p>디스코드 음성 회의를 자동 요약해 노션에 기록하는 에이전트</p>
+    <p style="margin-top:16px; font-weight:700; letter-spacing:0.1em;">이은석</p>
+  </div>
+  <div class="hint">→ 방향키로 넘기기</div>
+  <aside class="notes">안녕하세요, NoteFlow AI를 발표할 이은석입니다. 디스코드 음성 회의를 자동으로 녹음·요약해서 노션에 정리해주는 에이전트입니다.</aside>
+</section>
+
+<!-- 2. 목차 -->
+<section>
+  <div class="slide-head"><span class="kicker">Contents</span><h2>목차</h2><div class="rule"></div></div>
+  <div class="grid g3">
+    <div>
+      <div style="color:var(--neon-cyan); font-weight:800; font-size:0.66em; margin-bottom:8px;">🔎 배경 &amp; 기능</div>
+      <ul class="clean">
+        <li><strong>01</strong> 프로젝트 배경</li>
+        <li><strong>02</strong> 주요 기능</li>
+        <li><strong>03</strong> 시스템 아키텍처</li>
+      </ul>
+    </div>
+    <div>
+      <div style="color:var(--neon-cyan); font-weight:800; font-size:0.66em; margin-bottom:8px;">⚙️ 동작 &amp; 기술</div>
+      <ul class="clean">
+        <li><strong>04</strong> 처리 파이프라인</li>
+        <li><strong>05</strong> 기술 스택</li>
+        <li><strong>06</strong> 슬래시 커맨드</li>
+      </ul>
+    </div>
+    <div>
+      <div style="color:var(--neon-cyan); font-weight:800; font-size:0.66em; margin-bottom:8px;">💡 회고</div>
+      <ul class="clean">
+        <li><strong>07</strong> 트러블슈팅</li>
+        <li><strong>08</strong> 배운 점 &amp; 성과</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 3. 프로젝트 배경 -->
+<section>
+  <div class="slide-head"><span class="kicker">01 · Background</span><h2>프로젝트 배경</h2><div class="rule"></div></div>
+  <div class="grid g2">
+    <div class="card">
+      <h3>🗣️ 문제 상황</h3>
+      <p>"북잡(Bookjob)" 팀은 매주 여러 차례 디스코드 음성 회의를 진행하지만, 회의가 끝난 뒤 누군가 녹음을 다시 들으며 회의록을 정리해야 했습니다. 1~2시간짜리 회의를 요약하는 데 드는 시간과, 회의 중 섞인 사담·잡담을 걸러내는 수작업이 팀 생산성을 갉아먹었습니다.</p>
+    </div>
+    <div class="card">
+      <h3>🎯 목표</h3>
+      <ul class="clean">
+        <li>회의 종료와 동시에 <strong>핵심 액션 플랜</strong>만 남긴 요약본 자동 생성</li>
+        <li>사담·인사말은 걸러내고 <strong>회의 내용만</strong> 추출</li>
+        <li>결과를 팀이 이미 쓰는 <strong>노션 데이터베이스</strong>에 바로 기록</li>
+        <li>참석 인원 기반으로 <strong>전체/프론트/백엔드 회의</strong> 자동 분류</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 4. 주요 기능 -->
+<section>
+  <div class="slide-head"><span class="kicker">02 · Features</span><h2>주요 기능</h2><div class="rule"></div></div>
+  <div class="grid g3">
+    <div class="card"><h3>🎙️ 음성 수집·병합</h3><p>디스코드 음성 채널의 유저별 PCM 스트림을 저장 후 자동 병합</p></div>
+    <div class="card"><h3>📦 오디오 압축</h3><p>FFmpeg로 대용량 오디오를 MP3(64kbps)로 압축해 업로드 최적화</p></div>
+    <div class="card"><h3>🧠 Gemini 요약</h3><p>100만 토큰급 컨텍스트로 1~2시간 회의도 한 번에 요약</p></div>
+    <div class="card"><h3>🧹 사담 필터링</h3><p>프롬프트 엔지니어링으로 인사·잡담 제외, 미참석자 자동 제외</p></div>
+    <div class="card"><h3>📝 노션 자동 기록</h3><p>볼드·헤딩·리스트·표를 블록 단위로 변환해 노션에 업로드</p></div>
+    <div class="card"><h3>👥 참석자 매핑</h3><p>디스코드 참여자를 노션 사용자(Attendees)에 자동 연결</p></div>
+  </div>
+</section>
+
+<!-- 5. 시스템 아키텍처 -->
+<section>
+  <div class="slide-head"><span class="kicker">03 · Architecture</span><h2>시스템 아키텍처</h2><div class="rule"></div></div>
+  <div style="text-align:center;">
+    <img class="gimg" style="max-width:420px; margin:0 auto;" src="https://github.com/user-attachments/assets/795e7672-fcff-4942-98da-d78592d10fd8" alt="NoteFlow AI 시스템 아키텍처">
+  </div>
+</section>
+
+<!-- 6. 처리 파이프라인 -->
+<section>
+  <div class="slide-head"><span class="kicker">04 · Pipeline</span><h2>처리 파이프라인</h2><div class="rule"></div></div>
+  <div class="flow">
+    <div class="node"><span class="ico">🎙️</span><span class="t">음성 수집</span><span class="d">유저별 PCM</span></div>
+    <span class="ar">→</span>
+    <div class="node"><span class="ico">🔗</span><span class="t">PCM 병합</span><span class="d">fs 바이너리 병합</span></div>
+    <span class="ar">→</span>
+    <div class="node"><span class="ico">📦</span><span class="t">FFmpeg 변환</span><span class="d">MP3 64kbps</span></div>
+    <span class="ar">→</span>
+    <div class="node"><span class="ico">☁️</span><span class="t">File Manager 업로드</span><span class="d">URI 전달</span></div>
+    <span class="ar">→</span>
+    <div class="node"><span class="ico">🧠</span><span class="t">Gemini 요약</span><span class="d">사담 필터링</span></div>
+    <span class="ar">→</span>
+    <div class="node"><span class="ico">📝</span><span class="t">마크다운 파싱</span><span class="d">블록 변환</span></div>
+    <span class="ar">→</span>
+    <div class="node"><span class="ico">✅</span><span class="t">노션 업로드</span><span class="d">카테고리 자동 분류</span></div>
+  </div>
+</section>
+
+<!-- 7. 기술 스택 -->
+<section>
+  <div class="slide-head"><span class="kicker">05 · Tech Stack</span><h2>기술 스택</h2><div class="rule"></div></div>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Runtime &amp; 음성 처리</h3>
+      <span class="chip"><span class="t">Runtime</span>Node.js</span>
+      <span class="chip"><span class="t">Discord</span>discord.js</span>
+      <span class="chip"><span class="t">Voice</span>@discordjs/voice</span>
+      <span class="chip"><span class="t">Codec</span>prism-media</span>
+      <span class="chip"><span class="t">Audio</span>ffmpeg-static</span>
+    </div>
+    <div class="card">
+      <h3>AI &amp; 연동</h3>
+      <span class="chip"><span class="t">LLM</span>Gemini 2.5 Flash</span>
+      <span class="chip"><span class="t">Upload</span>Google AI File Manager</span>
+      <span class="chip"><span class="t">Docs</span>@notionhq/client</span>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 슬래시 커맨드 -->
+<section>
+  <div class="slide-head"><span class="kicker">06 · Commands</span><h2>슬래시 커맨드</h2><div class="rule"></div></div>
+  <table class="data">
+    <tr><th>커맨드</th><th>설명</th></tr>
+    <tr><td><code>/회의시작</code></td><td>음성 채널에 입장해 회의 녹음을 시작합니다</td></tr>
+    <tr><td><code>/회의종료</code></td><td>녹음을 종료하고 AI 요약본을 생성해 노션에 저장합니다</td></tr>
+    <tr><td><code>/노션재전송</code></td><td>마지막으로 생성된 요약본을 노션으로 다시 전송합니다</td></tr>
+    <tr><td><code>/노션저장</code></td><td>입력한 텍스트를 직접 노션 회의록에 저장합니다</td></tr>
+  </table>
+</section>
+
+<!-- 9. 트러블슈팅 -->
+<section>
+  <div class="slide-head"><span class="kicker">07 · Troubleshooting</span><h2>트러블슈팅</h2><div class="rule"></div></div>
+  <div class="card">
+    <div class="trouble"><div class="p">🐛 헤더 없는 PCM 원본 — 일반 플레이어·API로 재생·업로드 불가</div><span class="arrow">→</span><div class="s">✅ 바이너리 직접 병합 후 FFmpeg <b>-f s16le -ar 48000</b> 강제 입력으로 MP3 변환</div></div>
+    <div class="trouble"><div class="p">🐛 1시간 이상 회의 Base64 전송 시 서버 메모리 부족(OOM)</div><span class="arrow">→</span><div class="s">✅ <b>GoogleAIFileManager</b>로 클라우드 업로드 후 URI 방식 전달</div></div>
+    <div class="trouble"><div class="p">🐛 노션 블록 2,000자 제한 + 서식(헤딩·볼드·표) 미지원</div><span class="arrow">→</span><div class="s">✅ 줄 단위 파싱해 <b>커스텀 마크다운 파서</b>로 블록 타입 매핑</div></div>
+    <div class="trouble"><div class="p">🐛 Notion SDK v5에서 <code>databases.query</code> 제거·<code>data_source</code> 도입</div><span class="arrow">→</span><div class="s">✅ <b>notion.request</b> 저수준 API 호출로 전환</div></div>
+  </div>
+</section>
+
+<!-- 10. 배운점 & 성과 -->
+<section>
+  <div class="slide-head"><span class="kicker">08 · Retrospective</span><h2>배운 점 &amp; 성과</h2><div class="rule"></div></div>
+  <div class="grid g2">
+    <div class="card">
+      <h3>✅ 성과</h3>
+      <ul class="clean">
+        <li>회의 종료 → 노션 기록까지 <strong>완전 자동화</strong></li>
+        <li>회의록 정리 인력·시간 부담 제거</li>
+        <li>참석 인원 기반 <strong>카테고리 자동 분류</strong>로 팀별 회의록 정리</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>💡 배운 점</h3>
+      <ul class="clean">
+        <li>외부 API(디스코드·Gemini·노션) 각각의 <strong>제약을 먼저 파악</strong>하는 게 설계 시간을 아낀다</li>
+        <li>대용량 파일은 <strong>서버를 거치지 않는 경로</strong>(클라우드 업로드)가 안정적</li>
+        <li>SDK 메이저 업데이트는 <strong>저수준 API로 우회</strong>할 수 있는 여지를 늘 열어둔다</li>
+      </ul>
+    </div>
+  </div>
+  <p style="text-align:center; margin-top:26px; font-size:0.76em; color:var(--text-dim);">
+    <strong>음성 → AI 요약 → 협업 도구</strong> 연결로 팀의 반복 업무를 줄이는 방향으로 발전</p>
+</section>
+
+<!-- 11. 감사합니다 -->
+<section data-background-color="#0A1628" class="intro-slide">
+  <div style="display:flex; flex-direction:column; justify-content:center; height:100%;">
+    <div class="brand-reveal" style="animation-delay:0.2s;"><h1>감사합니다</h1></div>
+    <div class="sub-reveal" style="animation-delay:0.6s;"><p>NoteFlow AI — 디스코드 회의 자동 요약 &amp; 노션 기록 에이전트 &nbsp;·&nbsp; 이은석</p></div>
+  </div>
+</section>
+
+</div>
+</div>
+
+<div class="footer-brand">🗒️ <b>NoteFlow AI</b></div>
+
+<script src="./slides_files/reveal.js"></script>
+<script src="./slides_files/notes.js"></script>
+<script>
+  Reveal.initialize({
+    hash:true, slideNumber:'c/t', transition:'slide', backgroundTransition:'fade',
+    width:1280, height:720, margin:0.055,
+    plugins:[ RevealNotes ],
+  });
+</script>
+
+</body>
+</html>
