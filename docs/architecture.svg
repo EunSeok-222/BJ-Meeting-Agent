@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 1060" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', Roboto, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6366f1"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="880" height="1060" fill="#ffffff"/>
+  <text x="40" y="38" font-size="20" font-weight="700" fill="#312e81">NoteFlow AI — 시스템 아키텍처</text>
+  <text x="40" y="60" font-size="12.5" fill="#6b7280">디스코드 음성 회의 → 화자별 로컬 전사 → Claude 요약 → 노션 자동 기록</text>
+
+  <!-- flow boxes -->
+  <g>
+    <!-- b0 -->
+    <rect x="40" y="84" width="500" height="74" rx="10" fill="#f4f3ff" stroke="#6366f1" stroke-width="1.5"/>
+    <text x="60" y="114" font-size="15" font-weight="600" fill="#312e81">Discord 음성 채널</text>
+    <text x="60" y="136" font-size="12" fill="#4b5563">참가자 A · B · C — 발화자별로 분리된 스트림 수신</text>
+
+    <!-- b1 -->
+    <rect x="40" y="200" width="500" height="74" rx="10" fill="#f4f3ff" stroke="#6366f1" stroke-width="1.5"/>
+    <text x="60" y="230" font-size="15" font-weight="600" fill="#312e81">봇 · 화자별 PCM 트랙 저장</text>
+    <text x="60" y="252" font-size="12" fill="#4b5563">recordings/{userId}-{timestamp}.pcm  ·  1초 침묵 시 트랙 분리</text>
+
+    <!-- b2 -->
+    <rect x="40" y="316" width="500" height="74" rx="10" fill="#f4f3ff" stroke="#6366f1" stroke-width="1.5"/>
+    <text x="60" y="346" font-size="15" font-weight="600" fill="#312e81">PCM → 16kHz mono WAV</text>
+    <text x="60" y="368" font-size="12" fill="#4b5563">ffmpeg  ·  audio.service.js</text>
+
+    <!-- b3 highlight -->
+    <rect x="40" y="432" width="500" height="74" rx="10" fill="#e0e7ff" stroke="#4f46e5" stroke-width="2"/>
+    <text x="60" y="462" font-size="15" font-weight="600" fill="#312e81">faster-whisper (로컬 GPU)</text>
+    <text x="60" y="484" font-size="12" fill="#4b5563">large-v3-turbo · BatchedInferencePipeline · 트랙별 개별 전사</text>
+
+    <!-- b4 -->
+    <rect x="40" y="548" width="500" height="74" rx="10" fill="#f4f3ff" stroke="#6366f1" stroke-width="1.5"/>
+    <text x="60" y="578" font-size="15" font-weight="600" fill="#312e81">세그먼트 시간순 병합</text>
+    <text x="60" y="600" font-size="12" fill="#4b5563">transcribe.service.js  →  "[이름] 발화" 형태 전사본</text>
+
+    <!-- b5 highlight -->
+    <rect x="40" y="664" width="500" height="74" rx="10" fill="#e0e7ff" stroke="#4f46e5" stroke-width="2"/>
+    <text x="60" y="694" font-size="15" font-weight="600" fill="#312e81">claude CLI  ·  claude -p --output-format json</text>
+    <text x="60" y="716" font-size="12" fill="#4b5563">핵심 주제 · 결정사항 · 담당자별 할 일 표 · 사담 필터 · 3회 재시도</text>
+
+    <!-- b6 -->
+    <rect x="40" y="780" width="500" height="74" rx="10" fill="#f4f3ff" stroke="#6366f1" stroke-width="1.5"/>
+    <text x="60" y="810" font-size="15" font-weight="600" fill="#312e81">notion.service.js</text>
+    <text x="60" y="832" font-size="12" fill="#4b5563">마크다운 → 블록 · 표 → table 블록 · 참석자 people 매핑</text>
+
+    <!-- b7 -->
+    <rect x="40" y="896" width="500" height="74" rx="10" fill="#f4f3ff" stroke="#6366f1" stroke-width="1.5"/>
+    <text x="60" y="926" font-size="15" font-weight="600" fill="#312e81">Notion 회의록 페이지</text>
+    <text x="60" y="948" font-size="12" fill="#4b5563">카테고리 자동 분류 (전체 / 프론트 / 백엔드 회의)</text>
+  </g>
+
+  <!-- arrows between boxes -->
+  <g stroke="#6366f1" stroke-width="2" marker-end="url(#arrow)">
+    <line x1="290" y1="158" x2="290" y2="198"/>
+    <line x1="290" y1="274" x2="290" y2="314"/>
+    <line x1="290" y1="390" x2="290" y2="430"/>
+    <line x1="290" y1="506" x2="290" y2="546"/>
+    <line x1="290" y1="622" x2="290" y2="662"/>
+    <line x1="290" y1="738" x2="290" y2="778"/>
+    <line x1="290" y1="854" x2="290" y2="894"/>
+  </g>
+
+  <!-- side annotations -->
+  <g>
+    <rect x="596" y="196" width="248" height="104" rx="9" fill="#fafafa" stroke="#c7d2fe" stroke-width="1.2"/>
+    <text x="612" y="222" font-size="12.5" font-weight="700" fill="#3730a3">① 신원(identity) 확정</text>
+    <text x="612" y="244" font-size="11.5" fill="#4b5563">userId 는 음성 패킷에 포함 —</text>
+    <text x="612" y="262" font-size="11.5" fill="#4b5563">추측이 아니라 확정값</text>
+    <text x="612" y="284" font-size="11.5" fill="#4b5563">→ guild 닉네임 조회, state.userNames 캐시</text>
+    <line x1="540" y1="237" x2="596" y2="245" stroke="#a5b4fc" stroke-width="1.4" stroke-dasharray="4 3"/>
+
+    <rect x="596" y="560" width="248" height="86" rx="9" fill="#fafafa" stroke="#c7d2fe" stroke-width="1.2"/>
+    <text x="612" y="586" font-size="12.5" font-weight="700" fill="#3730a3">겹친 발화 처리</text>
+    <text x="612" y="608" font-size="11.5" fill="#4b5563">트랙이 물리적으로 분리 → Whisper는</text>
+    <text x="612" y="626" font-size="11.5" fill="#4b5563">겹친 소리를 안 들음. 겹침은 시간순</text>
+    <text x="612" y="644" font-size="11.5" fill="#4b5563">교차 줄로 복원</text>
+    <line x1="540" y1="585" x2="596" y2="595" stroke="#a5b4fc" stroke-width="1.4" stroke-dasharray="4 3"/>
+
+    <rect x="596" y="768" width="248" height="98" rx="9" fill="#fafafa" stroke="#c7d2fe" stroke-width="1.2"/>
+    <text x="612" y="794" font-size="12.5" font-weight="700" fill="#3730a3">② 참석자 매핑 (.env)</text>
+    <text x="612" y="816" font-size="11.5" fill="#4b5563">NOTION_USER_ID_MAPPING — userId (우선)</text>
+    <text x="612" y="834" font-size="11.5" fill="#4b5563">NOTION_USER_MAPPING — 표시명</text>
+    <text x="612" y="854" font-size="11.5" fill="#4b5563">디스코드 ↔ 노션 사용자 연결</text>
+    <line x1="540" y1="817" x2="596" y2="817" stroke="#a5b4fc" stroke-width="1.4" stroke-dasharray="4 3"/>
+  </g>
+
+  <!-- footer -->
+  <rect x="40" y="992" width="800" height="44" rx="10" fill="#4f46e5"/>
+  <text x="440" y="1019" font-size="12.5" fill="#ffffff" text-anchor="middle">로컬 PC · 바탕화면 아이콘(start-bot.bat) 실행 · 회의 처리 후 자동 종료 (+ 유휴 안전 타이머)</text>
+</svg>

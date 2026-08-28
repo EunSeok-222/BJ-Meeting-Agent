@@ -32,7 +32,7 @@
 * **자동 종료**: 회의 처리 완료 후 약 10분 뒤 봇 프로세스 자동 종료(유휴 3시간 안전장치 포함).
 
 ## NoteFlow AI — 시스템 아키텍처
-<img width="500" height="600" alt="image" src="https://github.com/user-attachments/assets/795e7672-fcff-4942-98da-d78592d10fd8" />
+<img alt="NoteFlow AI 시스템 아키텍처" src="docs/architecture.svg" width="720" />
 
 ## 기술 스택
 * **Runtime**: Node.js, Python (가상환경 `.venv`)
