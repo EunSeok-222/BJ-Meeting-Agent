@@ -4,6 +4,8 @@ module.exports = {
   userNames: new Map(), // userId -> displayName 캐시
   currentMeetingParticipants: new Set(), // 현재 회의 참여자 목록
   lastSummary: "", // 마지막으로 생성된 요약본 저장
-  lastParticipants: [], // 마지막 회의 참여자 목록 저장
-  lastFailedMeeting: null // 실패한 회의 정보 (audioPath, participants)
+  lastParticipants: [], // 마지막 회의 참여자 표시명 목록
+  lastSpeakers: [], // 마지막 회의 화자 목록 [{ userId, name }]
+  lastTranscript: "", // 마지막으로 생성된 전사본(녹취록) 저장
+  lastFailedMeeting: null, // 실패한 회의 정보 { transcript, participants, speakers }
 };

@@ -29,18 +29,15 @@ function parseRichText(text) {
   let match;
 
   while ((match = boldRegex.exec(text)) !== null) {
-    // 볼드체 이전의 일반 텍스트 추가
     if (match.index > lastIndex) {
       parts.push(
         ...createRichTextChunks(text.substring(lastIndex, match.index)),
       );
     }
-    // 볼드체 텍스트 추가
     parts.push(...createRichTextChunks(match[1], { bold: true }));
     lastIndex = boldRegex.lastIndex;
   }
 
-  // 남은 텍스트 추가
   if (lastIndex < text.length) {
     parts.push(...createRichTextChunks(text.substring(lastIndex)));
   }
@@ -48,14 +45,59 @@ function parseRichText(text) {
   return parts.length > 0 ? parts : createRichTextChunks(text);
 }
 
+/** 표 셀 하나를 rich_text 배열로. 빈 셀도 유효한 형태로 반환. */
+function cellRichText(text) {
+  const t = (text || "").trim();
+  if (!t) return [{ type: "text", text: { content: "" } }];
+  return parseRichText(t);
+}
+
+/** "| a | b | c |" 형태의 마크다운 표 줄인가 */
+function isTableRow(line) {
+  return /^\s*\|.*\|\s*$/.test(line);
+}
+
+/** "| --- | :--: |" 같은 구분선인가 */
+function isTableSeparator(line) {
+  return /^\s*\|?[\s:|-]+\|?\s*$/.test(line) && line.includes("-");
+}
+
+function splitTableRow(line) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((c) => c.trim());
+}
+
+function buildTableBlock(rows) {
+  const width = Math.max(...rows.map((r) => r.length));
+  return {
+    object: "block",
+    type: "table",
+    table: {
+      table_width: width,
+      has_column_header: true,
+      has_row_header: false,
+      children: rows.map((cells) => ({
+        object: "block",
+        type: "table_row",
+        table_row: {
+          cells: Array.from({ length: width }, (_, i) => cellRichText(cells[i])),
+        },
+      })),
+    },
+  };
+}
+
 /**
- * 마크다운 줄을 노션 블록 객체로 변환합니다.
+ * 마크다운 한 줄을 노션 블록으로 변환합니다. (표는 markdownToBlocks에서 처리)
  */
 function markdownLineToBlock(line) {
   line = line.trim();
   if (!line) return null;
 
-  // Heading 3
   if (line.startsWith("### ")) {
     return {
       object: "block",
@@ -63,7 +105,6 @@ function markdownLineToBlock(line) {
       heading_3: { rich_text: parseRichText(line.replace("### ", "")) },
     };
   }
-  // Heading 2
   if (line.startsWith("## ")) {
     return {
       object: "block",
@@ -71,7 +112,6 @@ function markdownLineToBlock(line) {
       heading_2: { rich_text: parseRichText(line.replace("## ", "")) },
     };
   }
-  // Heading 1
   if (line.startsWith("# ")) {
     return {
       object: "block",
@@ -79,18 +119,14 @@ function markdownLineToBlock(line) {
       heading_1: { rich_text: parseRichText(line.replace("# ", "")) },
     };
   }
-  // Bulleted List Item
   if (line.startsWith("* ") || line.startsWith("- ")) {
-    const content = line.startsWith("* ")
-      ? line.replace("* ", "")
-      : line.replace("- ", "");
+    const content = line.startsWith("* ") ? line.replace("* ", "") : line.replace("- ", "");
     return {
       object: "block",
       type: "bulleted_list_item",
       bulleted_list_item: { rich_text: parseRichText(content) },
     };
   }
-  // Numbered List Item
   if (/^\d+\.\s/.test(line)) {
     const content = line.replace(/^\d+\.\s/, "");
     return {
@@ -100,7 +136,6 @@ function markdownLineToBlock(line) {
     };
   }
 
-  // Default Paragraph
   return {
     object: "block",
     type: "paragraph",
@@ -108,20 +143,52 @@ function markdownLineToBlock(line) {
   };
 }
 
-// 사용자 이름과 노션 User ID 매핑 (보안을 위해 .env에서 로드)
-const USER_MAPPING = process.env.NOTION_USER_MAPPING 
-  ? JSON.parse(process.env.NOTION_USER_MAPPING) 
+/**
+ * 마크다운 전체를 노션 블록 배열로 변환합니다.
+ * 연속된 표 줄은 하나의 table 블록으로 묶습니다.
+ */
+function markdownToBlocks(text) {
+  const lines = text.split("\n");
+  const blocks = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (isTableRow(line)) {
+      const rows = [];
+      while (i < lines.length && isTableRow(lines[i])) {
+        if (!isTableSeparator(lines[i])) rows.push(splitTableRow(lines[i]));
+        i++;
+      }
+      i--; // for-loop의 i++ 보정
+      if (rows.length > 0) blocks.push(buildTableBlock(rows));
+      continue;
+    }
+
+    const block = markdownLineToBlock(line);
+    if (block) blocks.push(block);
+  }
+
+  return blocks;
+}
+
+// 이름 -> 노션 User ID (기존)
+const USER_MAPPING = process.env.NOTION_USER_MAPPING
+  ? JSON.parse(process.env.NOTION_USER_MAPPING)
+  : {};
+// 디스코드 userId -> 노션 User ID (이름이 바뀌어도 안 흔들림, 우선 적용)
+const USER_ID_MAPPING = process.env.NOTION_USER_ID_MAPPING
+  ? JSON.parse(process.env.NOTION_USER_ID_MAPPING)
   : {};
 
-async function recordToNotionDirect(
-  summaryText,
-  participants = [],
-  message = null,
-) {
+/**
+ * @param {string} summaryText  마크다운 요약
+ * @param {string[]} participants  참석자 표시명 목록
+ * @param {{ speakers?: {userId: string, name: string}[] }} [options]
+ */
+async function recordToNotionDirect(summaryText, participants = [], options = {}) {
   if (!DATABASE_ID) {
-    console.log(
-      "⚠️ .env에 BJ_NOTION_DATABASE_ID가 없어서 노션 기록을 생략합니다.",
-    );
+    console.log("⚠️ .env에 BJ_NOTION_DATABASE_ID가 없어서 노션 기록을 생략합니다.");
     return;
   }
 
@@ -133,37 +200,43 @@ async function recordToNotionDirect(
     if (participants.length === 2) {
       if (pSet.has("이은석") && (pSet.has("송수빈") || pSet.has("수빈 송"))) {
         category = "프론트 회의";
-      } else if (
-        pSet.has("이신지") &&
-        (pSet.has("김영철") || pSet.has("peng"))
-      ) {
+      } else if (pSet.has("이신지") && (pSet.has("김영철") || pSet.has("peng"))) {
         category = "백엔드 회의";
       }
     } else if (participants.length >= 4) {
       category = "전체 회의";
     }
 
-    // 2. 참석자(Attendees) ID 매핑
+    // 2. 참석자(Attendees) ID 매핑 — userId 우선, 없으면 이름으로
+    const speakers =
+      options.speakers && options.speakers.length > 0
+        ? options.speakers
+        : participants.map((name) => ({ userId: null, name }));
+
+    const seenIds = new Set();
     const attendeeIds = [];
     const unmappedNames = [];
-    
-    for (const name of participants) {
-      const id = USER_MAPPING[name];
+
+    for (const { userId, name } of speakers) {
+      const id = (userId && USER_ID_MAPPING[userId]) || USER_MAPPING[name];
       if (id) {
-        attendeeIds.push({ id });
+        if (!seenIds.has(id)) {
+          seenIds.add(id);
+          attendeeIds.push({ id });
+        }
       } else {
         unmappedNames.push(name);
       }
     }
 
     if (unmappedNames.length > 0) {
-      console.log(`⚠️ 다음 참여자들은 Notion 매핑 정보가 없어 제외되었습니다: ${unmappedNames.join(", ")}`);
+      console.log(`⚠️ 노션 매핑 정보가 없어 참석자에서 제외됨: ${unmappedNames.join(", ")}`);
     }
     if (attendeeIds.length > 0) {
       console.log(`✅ ${attendeeIds.length}명의 참석자가 노션에 등록됩니다.`);
     }
 
-    const lines = summaryText.split("\n");
+    // 3. 본문 블록
     const children = [
       {
         object: "block",
@@ -172,16 +245,10 @@ async function recordToNotionDirect(
           rich_text: [{ type: "text", text: { content: "🤖 AI 요약본" } }],
         },
       },
+      ...markdownToBlocks(summaryText),
     ];
 
-    for (const line of lines) {
-      const block = markdownLineToBlock(line);
-      if (block) {
-        children.push(block);
-      }
-    }
-
-    // 3. 페이지 생성 요청 (notion.request 사용으로 더 정확한 엔드포인트 공략)
+    // 4. 페이지 생성
     await notion.request({
       path: "pages",
       method: "POST",
@@ -212,17 +279,13 @@ async function recordToNotionDirect(
     });
 
     console.log(`북잡 회의록 업데이트 완료! (카테고리: ${category})`);
-    if (message)
-      message.reply(`✅ 노션에 [${category}]로 분류되어 전송되었습니다!`);
   } catch (error) {
     console.error("노션 전송 실패:", error.body ? error.body : error);
-    if (message)
-      message.reply(
-        "❌ 노션 전송에 실패했습니다. 로그를 확인하거나 `/노션재전송`을 시도해 보세요.",
-      );
+    throw error;
   }
 }
 
 module.exports = {
   recordToNotionDirect,
+  markdownToBlocks,
 };
