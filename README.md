@@ -165,6 +165,32 @@ npm test        # node --test  (test/ 자동 탐색)
 
 ---
 
+## 변경 이력
+
+### 2026-08 · Gemini → Claude 전환 + 로컬 실행
+- **AI 요약 엔진 교체**: Gemini 2.5 Flash 멀티모달 1회 호출 → `claude` CLI 헤드리스(`claude -p --output-format json`, 프롬프트는 stdin). 별도 API 키·과금 없이 기존 Claude Code 인증 사용.
+- **음성→텍스트 분리**: Claude는 오디오 입력이 안 되므로 전사 단계를 로컬 `faster-whisper`로 분리. 음성 원본은 로컬에만 남고 Claude에는 텍스트만 전달.
+- **화자 구분**: 섞인 음성 추측 → 디스코드 화자별 트랙을 각각 전사 후 시간순 병합(`[이름] 발화`). 신원이 디스코드 ID로 확정됨.
+- **실행 방식**: 공기계 상시 구동 → 내 PC + `start-bot.bat` 더블클릭. 회의 처리 후 자동 종료(+유휴 안전 타이머), `/봇종료` 커맨드.
+- 정리: `gemini.service.js` / `message.handler.js` 삭제, `@google/generative-ai` 의존성 제거, `message` 인텐트 제거.
+
+### 2026-08 · 성능·편의 개선
+- **전사 속도**: 모델 `large-v3` → `large-v3-turbo` + `BatchedInferencePipeline` (정확도 유지, 2~4배 빠름). `WHISPER_MODEL` / `WHISPER_BATCH` 로 되돌리기 가능.
+- **진행 상황 표시**: `/회의종료` 처리 중 전사(n/화자) → 요약 → 노션 업로드 단계를 메시지로 실시간 갱신.
+- **노션 표**: 요약의 마크다운 표를 노션 `table` 블록으로 변환(구분선 스킵, 첫 행 헤더).
+- **안정성**: `claude` CLI 인증/크레딧 오류를 감지해 재시도 없이 안내. `NOTION_USER_ID_MAPPING`(디스코드 userId 기준)으로 표시명이 바뀌어도 참석자 연결 유지. `AUTO_EXIT_MINUTES` / `SAFETY_IDLE_HOURS` 를 `.env`로 조정(0이면 비활성).
+- Windows 이슈 해결: `.bat` 인코딩(ASCII+CRLF), CUDA DLL 경로 등록(`os.add_dll_directory`), Python stdout UTF-8 고정, HF 심볼릭 링크 비활성화.
+
+### 2026-08 · 긴 회의(2~3시간) 대응 + 테스트
+- **화자별 트랙 병합**: 발화 조각(1초 침묵마다 분리)을 화자별 1트랙으로 이어붙인 뒤 전사 → 전사 대상이 수천 개 → 참석자 수(2~6). 명령행 길이 초과·프로세스 스팸·타임아웃 위험 제거. 조각 사이 실제 침묵은 각 조각의 epoch을 앵커로 전역 시간축 복원.
+- **손실 방지**: 전사본이 확보된 시점에 원본/임시 파일 정리 → 이후 요약·노션 단계가 실패해도 `/회의정리재시도`로 재전사 없이 복구. `transcribe.py`는 파일 단위 예외 처리로 한 트랙 실패가 전체를 죽이지 않음.
+- **노션 블록 분할**: 요약 블록이 100개를 넘으면 `PATCH children`로 나눠 append(잘림 방지).
+- **Discord 한계 대응**: 처리가 15분을 넘겨 상호작용 토큰이 만료되면 채널 메시지로 최종 결과를 남김. 음성 연결이 순간 끊기거나 채널 이동한 경우는 재수립을 시도하고 진짜 끊김만 중단.
+- **타임아웃 env화**: `WHISPER_TIMEOUT_MIN`(기본 120), `CLAUDE_TIMEOUT_MIN`(기본 10).
+- **테스트 도입**: `node:test` 기반 순수 함수 스위트(29 케이스). `npm test`.
+
+---
+
 ## Author
 **이은석 (Frontend Developer)** "북잡(Bookjob)" 서비스의 프론트엔드 리드로서 팀의 개발 문화와 생산성 도구를 고민합니다.
 
