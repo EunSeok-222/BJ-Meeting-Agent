@@ -4,6 +4,8 @@ const {
   joinVoiceChannel,
   getVoiceConnection,
   EndBehaviorType,
+  entersState,
+  VoiceConnectionStatus,
 } = require("@discordjs/voice");
 const state = require("../state");
 const { transcribeMeeting } = require("../services/transcribe.service");
@@ -35,6 +37,20 @@ function makeProgressReporter(interaction) {
     lastAt = now;
     interaction.editReply(text).catch(() => {});
   };
+}
+
+// 처리가 15분을 넘기면 상호작용 토큰이 만료돼 editReply가 실패한다.
+// 그 경우 채널에 일반 메시지로 최종 결과를 남긴다.
+async function sendFinal(interaction, text) {
+  try {
+    await interaction.editReply(text);
+  } catch (e) {
+    try {
+      await interaction.channel.send(text);
+    } catch (e2) {
+      console.error("최종 결과 메시지 전송 실패:", e2.message);
+    }
+  }
 }
 
 async function handleInteraction(interaction) {
@@ -78,10 +94,25 @@ async function handleInteraction(interaction) {
       await interaction.reply("🎤 회의 기록 에이전트가 입장했습니다. 지금부터 목소리를 수집합니다.");
       state.isRecording = true;
 
-      connection.on("stateChange", (oldState, newState) => {
-        if (newState.status === "disconnected") {
+      // 음성 연결이 잠깐 끊기거나 채널을 옮긴 경우는 복구를 시도하고,
+      // 진짜 끊긴 경우에만 기록을 중단한다. (긴 회의 중 순간 끊김으로 전체 손실 방지)
+      connection.on(VoiceConnectionStatus.Disconnected, async () => {
+        try {
+          await Promise.race([
+            entersState(connection, VoiceConnectionStatus.Signalling, 5000),
+            entersState(connection, VoiceConnectionStatus.Connecting, 5000),
+          ]);
+          console.log("음성 연결 재수립 중 — 기록을 계속합니다.");
+        } catch (e) {
+          console.error("음성 연결이 끊겨 회의 기록을 중단합니다.");
           state.isRecording = false;
           state.activeStreams.clear();
+          try {
+            connection.destroy();
+          } catch (err) {}
+          interaction.channel
+            ?.send("⚠️ 음성 연결이 끊겨 기록이 중단됐습니다. `/회의종료`로 지금까지 기록분을 정리하세요.")
+            .catch(() => {});
         }
       });
 
@@ -180,21 +211,22 @@ async function handleInteraction(interaction) {
     const report = makeProgressReporter(interaction);
 
     try {
-      const { transcript, participants: spokenParticipants, speakers } = await transcribeMeeting(
-        files,
-        recordingsDir,
-        interaction.guild,
-        report,
-      );
+      const {
+        transcript,
+        participants: spokenParticipants,
+        speakers,
+        warnings = [],
+      } = await transcribeMeeting(files, recordingsDir, interaction.guild, report);
       state.lastTranscript = transcript;
       state.lastSpeakers = speakers;
 
       if (!transcript.trim()) {
         state.lastFailedMeeting = null;
-        return interaction.editReply("전사 결과가 비어 있습니다. 음성이 제대로 녹음되지 않았을 수 있어요.");
+        return sendFinal(interaction, "전사 결과가 비어 있습니다. 음성이 제대로 녹음되지 않았을 수 있어요.");
       }
 
       const participantsForSummary = participantsList.length > 0 ? participantsList : spokenParticipants;
+      const warnNote = warnings.length > 0 ? `\n\n⚠️ 일부 트랙 처리 경고:\n- ${warnings.join("\n- ")}` : "";
 
       await interaction.editReply("🤖 AI가 회의록을 작성 중입니다...").catch(() => {});
       const summary = await summarizeWithClaude(transcript, participantsForSummary);
@@ -205,7 +237,7 @@ async function handleInteraction(interaction) {
       await recordToNotionDirect(summary, participantsForSummary, { speakers });
 
       const replyText = summary.length > 1900 ? summary.substring(0, 1900) + "..." : summary;
-      await interaction.editReply("✅ AI 요약 및 노션 전송이 완료되었습니다!\n\n" + replyText);
+      await sendFinal(interaction, "✅ AI 요약 및 노션 전송이 완료되었습니다!" + warnNote + "\n\n" + replyText);
 
       state.lastFailedMeeting = null;
     } catch (error) {
@@ -218,8 +250,10 @@ async function handleInteraction(interaction) {
       const hint =
         error instanceof ClaudeAuthError
           ? "\n> " + error.message
-          : "\n`/회의정리재시도` 커맨드로 나중에 다시 시도할 수 있습니다.";
-      await interaction.editReply("❌ 회의 요약/전송 중 오류가 발생했습니다." + hint);
+          : state.lastTranscript
+            ? "\n`/회의정리재시도` 커맨드로 다시 시도할 수 있습니다. (전사본은 보존됨)"
+            : "\n전사 단계에서 실패해 전사본이 없습니다. 봇 콘솔 로그를 확인하세요.";
+      await sendFinal(interaction, "❌ 회의 요약/전송 중 오류가 발생했습니다." + hint);
     } finally {
       scheduleAutoExit();
     }
@@ -249,7 +283,7 @@ async function handleInteraction(interaction) {
       await recordToNotionDirect(summary, participants, { speakers: speakers || [] });
 
       const replyText = summary.length > 1900 ? summary.substring(0, 1900) + "..." : summary;
-      await interaction.editReply("✅ 재시도 성공! 요약 및 노션 전송이 완료되었습니다.\n\n" + replyText);
+      await sendFinal(interaction, "✅ 재시도 성공! 요약 및 노션 전송이 완료되었습니다.\n\n" + replyText);
 
       state.lastFailedMeeting = null;
     } catch (error) {
@@ -258,7 +292,7 @@ async function handleInteraction(interaction) {
         error instanceof ClaudeAuthError
           ? "\n> " + error.message
           : "\nclaude CLI 상태(로그인/네트워크)를 확인해 주세요.";
-      await interaction.editReply("❌ 여전히 오류가 발생합니다." + hint);
+      await sendFinal(interaction, "❌ 여전히 오류가 발생합니다." + hint);
     } finally {
       scheduleAutoExit();
     }

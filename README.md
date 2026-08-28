@@ -20,6 +20,12 @@
 
 화자를 **디스코드 신원으로 확정**하므로(트랙 분리 전사), 섞인 음성에서 화자를 추측하던 이전 방식보다 담당자별 정리가 정확합니다.
 
+### 긴 회의(2~3시간) 대응
+- 발화 조각(1초 침묵마다 분리)을 **화자별로 하나의 트랙으로 이어붙인 뒤** 전사 → 전사 대상이 수천 개가 아니라 참석자 수(2~6개). 조각 사이 실제 침묵은 각 조각의 epoch을 앵커로 유지해 전역 시간축 복원.
+- 전사가 끝나면 전사본이 확보된 시점에 **원본/임시 파일을 정리**하고, 이후 요약·노션 단계가 실패해도 `/회의정리재시도`로 재전사 없이 복구.
+- 요약 블록이 100개를 넘으면 노션에 **나눠서 append**(잘림 방지). 처리가 15분을 넘겨 상호작용 토큰이 만료되면 채널 메시지로 최종 결과를 남김.
+- 음성 연결이 순간 끊기거나 채널을 옮긴 경우는 재수립을 시도하고, 진짜 끊긴 경우에만 기록을 중단하며 채널에 알림.
+
 ## 주요 기능
 * **발화자별 트랙 녹음**: 디스코드 음성 채널의 유저별 스트림을 각각 PCM으로 저장.
 * **로컬 GPU 전사**: `faster-whisper` `large-v3-turbo` + 배치 파이프라인을 CUDA로 구동. 외부 전송 없이 로컬에서 전사.
@@ -85,6 +91,8 @@ NOTION_USER_MAPPING={"이름":"노션_유저_ID", ...}
 # WHISPER_MODEL=large-v3-turbo  # 정확도 최우선이면 large-v3
 # WHISPER_BATCH=8            # 배치 전사 크기. 0이면 단일 모드
 # WHISPER_DEVICE=cpu / WHISPER_COMPUTE=int8   # GPU 문제 시 CPU 폴백
+# WHISPER_TIMEOUT_MIN=120    # 전사 프로세스 안전 타임아웃(분)
+# CLAUDE_TIMEOUT_MIN=10      # claude CLI 요약 호출 타임아웃(분). 긴 회의는 늘리기
 ```
 | 변수 | 설명 |
 |:---|:---|
@@ -96,6 +104,7 @@ NOTION_USER_MAPPING={"이름":"노션_유저_ID", ...}
 | `CLAUDE_BIN` | (선택) `claude` 실행 파일 절대경로 |
 | `AUTO_EXIT_MINUTES` / `SAFETY_IDLE_HOURS` | (선택) 자동 종료/안전 타이머 시간 |
 | `WHISPER_MODEL` / `WHISPER_BATCH` / `WHISPER_DEVICE` / `WHISPER_COMPUTE` | (선택) 전사 엔진 튜닝 |
+| `WHISPER_TIMEOUT_MIN` / `CLAUDE_TIMEOUT_MIN` | (선택) 전사·요약 타임아웃(분) |
 
 > `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` 는 필요 없습니다. 요약은 로컬에 로그인된 `claude` CLI가 처리합니다.
 
@@ -115,6 +124,23 @@ NOTION_USER_MAPPING={"이름":"노션_유저_ID", ...}
 | `/봇종료` | 봇을 지금 바로 종료합니다. (자동 종료를 기다리지 않음) |
 
 `/회의종료` 처리 중에는 "전사 중 (n/트랙) → AI 요약 중 → 노션 업로드 중" 진행 상황이 메시지에 실시간 표시됩니다.
+
+## 테스트
+
+의존성 없이 Node 내장 러너(`node:test`)를 사용합니다.
+
+```bash
+npm test        # node --test  (test/ 자동 탐색)
+```
+
+순수 로직만 커버합니다 (Discord 음성 / 실제 whisper / 실제 Notion API 호출은 수동 검증 영역):
+
+| 파일 | 검증 |
+|:---|:---|
+| `test/transcribe.service.test.js` | 파일명 파싱, 조각 오프셋 계산, 트랙 사이 침묵의 시각 환산, 세그먼트 시간순 병합·화자 dedup |
+| `test/notion.service.test.js` | 마크다운→블록, 표→table 블록(구분선 스킵·셀 패딩), 볼드 분리·2000자 청킹, 카테고리 분류, 참석자 매핑(userId 우선·중복 제거) |
+| `test/claude.service.test.js` | 프롬프트 구성, 인증 오류 패턴 감지, CLI JSON 응답 파싱(`is_error`·인증 오류·파싱 실패) |
+| `test/lifecycle.test.js` | 자동 종료/안전 타이머 env 파싱 (명시적 0 = 비활성) |
 
 ## 트러블슈팅
 

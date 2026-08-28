@@ -127,13 +127,18 @@ def main():
             continue
 
         log(f"전사 시작 ({idx}/{total}): {abspath}")
-        segments, info = transcribe_one(abspath)
-        seg_list = []
-        for s in segments:
-            text = (s.text or "").strip()
-            if not text:
-                continue
-            seg_list.append({"start": round(s.start, 3), "end": round(s.end, 3), "text": text})
+        try:
+            segments, info = transcribe_one(abspath)
+            seg_list = []
+            for s in segments:
+                text = (s.text or "").strip()
+                if not text:
+                    continue
+                seg_list.append({"start": round(s.start, 3), "end": round(s.end, 3), "text": text})
+        except Exception as e:  # noqa: BLE001
+            # 한 파일이 실패해도 나머지는 계속 처리한다 (긴 회의 부분 손실 방지)
+            log(f"전사 실패 ({idx}/{total}), 건너뜀: {abspath} ({e})")
+            seg_list = []
         log(f"전사 완료 ({idx}/{total}): {abspath} (구간 {len(seg_list)}개)")
         results.append({"file": abspath, "segments": seg_list})
 

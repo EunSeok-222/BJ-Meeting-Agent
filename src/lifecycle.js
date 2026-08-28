@@ -1,12 +1,19 @@
 const state = require("./state");
 
-// 회의 처리(요약+노션 전송)가 끝난 뒤 이 시간이 지나면 봇을 자동 종료한다.
-const AUTO_EXIT_MINUTES = Number(process.env.AUTO_EXIT_MINUTES) || 10;
-// 종료를 깜빡했을 때를 대비한 안전장치. 유휴 상태로 이 시간이 지나면 종료.
-const SAFETY_IDLE_HOURS = Number(process.env.SAFETY_IDLE_HOURS) || 3;
-// 0 이하로 두면 각 기능을 비활성화
-const MEETING_DONE_EXIT_MS = AUTO_EXIT_MINUTES * 60 * 1000;
-const SAFETY_IDLE_MS = SAFETY_IDLE_HOURS * 60 * 60 * 1000;
+/**
+ * .env에서 종료 타이머 설정을 읽는다. (순수 함수 — 테스트 대상)
+ * 명시적으로 0을 주면 해당 기능을 끈다. 값이 없거나 잘못되면 기본값.
+ */
+function resolveExitConfig(env = process.env) {
+  const autoMin = Number(env.AUTO_EXIT_MINUTES);
+  const safeHr = Number(env.SAFETY_IDLE_HOURS);
+  return {
+    autoExitMs: (Number.isFinite(autoMin) ? autoMin : 10) * 60 * 1000,
+    safetyIdleMs: (Number.isFinite(safeHr) ? safeHr : 3) * 60 * 60 * 1000,
+  };
+}
+
+const { autoExitMs: MEETING_DONE_EXIT_MS, safetyIdleMs: SAFETY_IDLE_MS } = resolveExitConfig();
 const SAFETY_CHECK_MS = 5 * 60 * 1000; // 5분마다 점검
 
 let autoExitTimer = null;
@@ -23,7 +30,7 @@ function exitNow(reason) {
 function scheduleAutoExit() {
   if (MEETING_DONE_EXIT_MS <= 0) return;
   if (autoExitTimer) clearTimeout(autoExitTimer);
-  console.log(`회의 처리 완료 — ${AUTO_EXIT_MINUTES}분 후 봇을 자동 종료합니다.`);
+  console.log(`회의 처리 완료 — ${MEETING_DONE_EXIT_MS / 60000}분 후 봇을 자동 종료합니다.`);
   autoExitTimer = setTimeout(() => exitNow("자동 종료 시간 경과"), MEETING_DONE_EXIT_MS);
 }
 
@@ -55,5 +62,5 @@ module.exports = {
   cancelAutoExit,
   armSafetyTimer,
   exitNow,
-  AUTO_EXIT_MINUTES,
+  resolveExitConfig,
 };

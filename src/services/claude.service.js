@@ -2,12 +2,18 @@ const { execFile } = require("child_process");
 
 // 기본은 PATH의 `claude`. 문제가 있으면 .env에 CLAUDE_BIN으로 절대경로 지정.
 const CLAUDE_BIN = process.env.CLAUDE_BIN || "claude";
+// 긴 회의 전사본(수만 토큰) 요약은 3분을 넘길 수 있어 기본 10분.
+const CLAUDE_TIMEOUT_MS = (Number(process.env.CLAUDE_TIMEOUT_MIN) || 10) * 60 * 1000;
 
 // 인증/로그인/크레딧 문제로 보이는 메시지 패턴 (재시도해도 소용없음)
 const AUTH_ERROR_RE =
   /(invalid api key|api[_ ]?key|not authenticated|please run .*login|\/login|unauthorized|401|credit balance|insufficient|quota)/i;
 
 class ClaudeAuthError extends Error {}
+
+function isAuthError(text) {
+  return AUTH_ERROR_RE.test(String(text || ""));
+}
 
 function buildPrompt(transcript, participants) {
   const participantsStr = participants.length > 0 ? participants.join(", ") : "알 수 없음";
@@ -38,6 +44,29 @@ ${transcript}
 10. 요약 본문만 출력하고, 인사말이나 "요약해 드리겠습니다" 같은 메타 설명은 붙이지 마.`;
 }
 
+/**
+ * claude CLI의 --output-format json stdout을 파싱해 요약 텍스트를 반환한다.
+ * is_error / 인증 오류를 구분해 던진다. (순수 함수 — 테스트 대상)
+ */
+function parseClaudeOutput(stdout) {
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch (e) {
+    throw new Error("claude CLI 응답 파싱 실패: " + String(stdout).slice(0, 500));
+  }
+  if (parsed.is_error) {
+    const msg = parsed.result || JSON.stringify(parsed);
+    if (isAuthError(msg)) {
+      throw new ClaudeAuthError(
+        "claude CLI 인증/크레딧 문제로 보입니다. 터미널에서 `claude` 로그인/사용량을 확인하세요.\n" + msg,
+      );
+    }
+    throw new Error("claude CLI 오류 응답: " + msg);
+  }
+  return (parsed.result || "").trim();
+}
+
 function runClaudeOnce(prompt) {
   return new Promise((resolve, reject) => {
     const child = execFile(
@@ -45,13 +74,13 @@ function runClaudeOnce(prompt) {
       ["-p", "--output-format", "json"],
       {
         maxBuffer: 20 * 1024 * 1024,
-        timeout: 180000,
+        timeout: CLAUDE_TIMEOUT_MS,
         shell: process.platform === "win32", // Windows의 claude.cmd 실행 대응
       },
       (err, stdout, stderr) => {
-        const blob = `${stderr || ""}\n${stdout || ""}`;
         if (err) {
-          if (AUTH_ERROR_RE.test(blob)) {
+          const blob = `${stderr || ""}\n${stdout || ""}`;
+          if (isAuthError(blob)) {
             return reject(
               new ClaudeAuthError(
                 "claude CLI 인증 문제로 보입니다. 터미널에서 `claude` 를 실행해 로그인 상태를 확인하세요.",
@@ -60,24 +89,11 @@ function runClaudeOnce(prompt) {
           }
           return reject(new Error(`claude CLI 실행 실패: ${stderr || err.message}`));
         }
-        let parsed;
         try {
-          parsed = JSON.parse(stdout);
+          resolve(parseClaudeOutput(stdout));
         } catch (e) {
-          return reject(new Error("claude CLI 응답 파싱 실패: " + String(stdout).slice(0, 500)));
+          reject(e);
         }
-        if (parsed.is_error) {
-          const msg = parsed.result || JSON.stringify(parsed);
-          if (AUTH_ERROR_RE.test(msg)) {
-            return reject(
-              new ClaudeAuthError(
-                "claude CLI 인증/크레딧 문제로 보입니다. 터미널에서 `claude` 로그인/사용량을 확인하세요.\n" + msg,
-              ),
-            );
-          }
-          return reject(new Error("claude CLI 오류 응답: " + msg));
-        }
-        resolve((parsed.result || "").trim());
       },
     );
 
@@ -118,4 +134,8 @@ async function summarizeWithClaude(transcript, participants = []) {
 module.exports = {
   summarizeWithClaude,
   ClaudeAuthError,
+  // 순수 함수 (테스트용)
+  buildPrompt,
+  parseClaudeOutput,
+  isAuthError,
 };
