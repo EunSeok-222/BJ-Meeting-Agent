@@ -8,4 +8,5 @@ module.exports = {
   lastSpeakers: [], // 마지막 회의 화자 목록 [{ userId, name }]
   lastTranscript: "", // 마지막으로 생성된 전사본(녹취록) 저장
   lastFailedMeeting: null, // 실패한 회의 정보 { transcript, participants, speakers }
+  lastTextChannelId: null, // 마지막 커맨드가 실행된 텍스트 채널 (종료 훅에서 결과 알림용)
 };

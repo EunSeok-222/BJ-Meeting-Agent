@@ -54,7 +54,9 @@ bookjob-ai-bot/
 ├── start-bot.bat                     # 바탕화면 더블클릭 실행용 런처
 ├── scripts/
 │   ├── setup.md                      # 최초 1회 세팅 가이드
-│   └── transcribe.py                 # faster-whisper 래퍼 (WAV → 세그먼트 JSON)
+│   ├── transcribe.py                 # faster-whisper 래퍼 (WAV → 세그먼트 JSON)
+│   └── recover.js                    # 봇이 꺼진 뒤 recordings/ 잔여 조각으로 회의 복구
+├── test/                             # node:test 순수 함수 스위트
 ├── src/
 │   ├── lifecycle.js                  # 자동 종료 타이머
 │   ├── config/
@@ -66,7 +68,8 @@ bookjob-ai-bot/
 │   │   ├── audio.service.js          # PCM → WAV 변환
 │   │   ├── transcribe.service.js     # 트랙별 전사 + 시간순 병합
 │   │   ├── claude.service.js         # claude CLI 요약 요청
-│   │   └── notion.service.js         # 노션 페이지 생성 및 마크다운 파싱
+│   │   ├── notion.service.js         # 노션 페이지 생성 및 마크다운 파싱
+│   │   └── pipeline.js               # 전사→요약→노션 처리 (커맨드·종료 훅·복구 공용)
 │   └── state.js                      # 참석자 목록 등 런타임 상태 관리
 ├── .env                              # 환경 변수 (Git 미추적)
 └── .gitignore
@@ -85,6 +88,7 @@ NOTION_USER_MAPPING={"이름":"노션_유저_ID", ...}
 
 # --- 선택 ---
 # NOTION_USER_ID_MAPPING={"디스코드_userId":"노션_유저_ID", ...}   # 이름보다 우선 적용, 표시명 바뀌어도 안전
+# DISCORD_NAME_MAPPING={"디스코드_userId":"표시명", ...}          # scripts/recover.js 가 화자 이름 해석에 사용
 # CLAUDE_BIN=C:\Users\<사용자>\AppData\Roaming\npm\claude.cmd     # claude 실행이 안 될 때만
 # AUTO_EXIT_MINUTES=10        # 회의 처리 후 자동 종료까지 대기(분). 0이면 자동 종료 안 함
 # SAFETY_IDLE_HOURS=3         # 유휴 상태 이 시간 지나면 종료. 0이면 안전 타이머 끔
@@ -101,6 +105,7 @@ NOTION_USER_MAPPING={"이름":"노션_유저_ID", ...}
 | `BJ_NOTION_DATABASE_ID` | 회의록을 저장할 노션 데이터베이스(Data Source) ID |
 | `NOTION_USER_MAPPING` | 팀원 **이름** → 노션 User ID JSON |
 | `NOTION_USER_ID_MAPPING` | (선택) 디스코드 **userId** → 노션 User ID JSON. 이름 매핑보다 우선 |
+| `DISCORD_NAME_MAPPING` | (선택) 디스코드 **userId** → 표시명 JSON. `scripts/recover.js` 복구 시 화자 이름 |
 | `CLAUDE_BIN` | (선택) `claude` 실행 파일 절대경로 |
 | `AUTO_EXIT_MINUTES` / `SAFETY_IDLE_HOURS` | (선택) 자동 종료/안전 타이머 시간 |
 | `WHISPER_MODEL` / `WHISPER_BATCH` / `WHISPER_DEVICE` / `WHISPER_COMPUTE` | (선택) 전사 엔진 튜닝 |
@@ -121,9 +126,13 @@ NOTION_USER_MAPPING={"이름":"노션_유저_ID", ...}
 | `/회의정리재시도` | 요약/노션 전송이 실패했을 때 보존된 전사본으로 다시 시도합니다. |
 | `/노션재전송` | 마지막으로 생성된 요약본을 노션으로 다시 전송합니다. |
 | `/노션저장` | 입력한 텍스트를 직접 노션 회의록에 저장합니다. |
-| `/봇종료` | 봇을 지금 바로 종료합니다. (자동 종료를 기다리지 않음) |
+| `/봇종료` | 봇을 종료합니다. **정리 안 한 회의가 있으면 전사·요약·노션 업로드 후** 종료합니다. |
 
 `/회의종료` 처리 중에는 "전사 중 (n/트랙) → AI 요약 중 → 노션 업로드 중" 진행 상황이 메시지에 실시간 표시됩니다.
+
+### `/회의종료`를 깜빡했다면
+- **`/봇종료`** 또는 콘솔에서 **Ctrl+C** → 남은 녹음을 자동으로 정리(전사→요약→노션)한 뒤 종료합니다.
+- 콘솔 창을 **X로 닫으면** OS가 즉시 프로세스를 죽여 정리가 안 될 수 있습니다. 그 경우 다시 켜지 말고 **`node scripts/recover.js`** 를 실행하면 `recordings/` 에 남은 조각으로 복구합니다.
 
 ## 테스트
 
@@ -187,7 +196,12 @@ npm test        # node --test  (test/ 자동 탐색)
 - **노션 블록 분할**: 요약 블록이 100개를 넘으면 `PATCH children`로 나눠 append(잘림 방지).
 - **Discord 한계 대응**: 처리가 15분을 넘겨 상호작용 토큰이 만료되면 채널 메시지로 최종 결과를 남김. 음성 연결이 순간 끊기거나 채널 이동한 경우는 재수립을 시도하고 진짜 끊김만 중단.
 - **타임아웃 env화**: `WHISPER_TIMEOUT_MIN`(기본 120), `CLAUDE_TIMEOUT_MIN`(기본 10).
-- **테스트 도입**: `node:test` 기반 순수 함수 스위트(29 케이스). `npm test`.
+- **테스트 도입**: `node:test` 기반 순수 함수 스위트. `npm test`.
+
+### 2026-09 · 종료 시 자동 정리 + 복구 스크립트
+- **`/봇종료` / Ctrl+C 종료 시**, `/회의종료`를 안 했더라도 `recordings/` 에 남은 녹음을 전사→요약→노션 업로드한 뒤 종료. 처리 파이프라인을 `src/services/pipeline.js` 로 추출해 `/회의종료`·`/봇종료`·SIGINT 훅·복구 스크립트가 공유.
+- **`scripts/recover.js`**: 봇이 이미 꺼진 상태에서 `recordings/` 잔여 조각으로 회의를 복구. 화자 이름은 `.env` 의 `DISCORD_NAME_MAPPING` 으로 해석.
+- **참석자 매핑 강화**: `.env` 에 `NOTION_USER_ID_MAPPING`(디스코드 userId→노션 ID) 추가 — 표시명이 바뀌어도 안 흔들림, 이름 매핑보다 우선.
 
 ---
 

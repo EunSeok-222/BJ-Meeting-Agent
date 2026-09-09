@@ -22,13 +22,17 @@ const { transcribeMeeting } = require("../src/services/transcribe.service");
 const { summarizeWithClaude } = require("../src/services/claude.service");
 const { recordToNotionDirect } = require("../src/services/notion.service");
 
-// 디스코드 userId -> 표시명
-const KNOWN_NAMES = {
-  "433873045158101014": "이은석",
-  "1141980484671389707": "송수빈",
-  "1284880963070984216": "이신지",
-  "301702495938543616": "Peng",
-};
+// 디스코드 userId -> 표시명.
+// .env 의 DISCORD_NAME_MAPPING(JSON) 을 우선 사용하고, 없으면 아래 기본값.
+// (봇 재시작 시 state.userNames 캐시가 사라지므로 복구 시엔 이 표로 이름을 해석한다.)
+const KNOWN_NAMES = process.env.DISCORD_NAME_MAPPING
+  ? JSON.parse(process.env.DISCORD_NAME_MAPPING)
+  : {
+      "433873045158101014": "이은석",
+      "1141980484671389707": "송수빈",
+      "1284880963070984216": "이신지",
+      "301702495938543616": "Peng",
+    };
 
 const RECORDINGS_DIR = path.join(__dirname, "..", "recordings");
 const OUT_DIR = path.join(__dirname, "..", "recovered");

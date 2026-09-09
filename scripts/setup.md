@@ -81,3 +81,7 @@ CLAUDE_BIN=C:\Users\dldms\AppData\Roaming\npm\claude.cmd
 - 매주 반복이면: 아이콘 더블클릭 → `/회의시작` → 회의 → `/회의종료` → 노션 확인 → 창은 알아서 닫힘
 - 처리 순서: 사람별 음성 트랙 각각 전사(GPU) → 시간순 병합 → `claude -p`로 요약 → 노션 업로드
 - 전사/요약 로그는 봇 콘솔 창에 실시간 출력됨
+- **`/회의종료`를 깜빡했을 때**:
+  - `/봇종료` 또는 콘솔에서 `Ctrl+C` → 남은 녹음을 정리(전사→요약→노션)한 뒤 종료
+  - 콘솔 창을 X로 닫아 정리가 안 됐으면 → `node scripts/recover.js` 실행 (`recordings/` 잔여 조각으로 복구)
+- 팀원이 바뀌면 `.env` 의 `DISCORD_NAME_MAPPING`(userId→이름), `NOTION_USER_ID_MAPPING`(userId→노션ID) 수정

@@ -23,7 +23,7 @@ const commands = [
     .setDescription("실패했던 회의를 보존된 전사본으로 다시 요약하여 노션에 업로드합니다."),
   new SlashCommandBuilder()
     .setName("봇종료")
-    .setDescription("봇 프로세스를 지금 바로 종료합니다. (자동 종료를 기다리지 않음)"),
+    .setDescription("봇을 종료합니다. 정리 안 한 회의가 있으면 전사·요약·노션 업로드 후 종료합니다."),
 ].map(command => command.toJSON());
 
 async function registerCommands(token, clientId, guildIds = []) {
