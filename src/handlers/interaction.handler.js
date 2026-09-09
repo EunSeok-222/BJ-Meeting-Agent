@@ -8,6 +8,7 @@ const {
   VoiceConnectionStatus,
 } = require("@discordjs/voice");
 const state = require("../state");
+const { resolveDisplayName } = require("../services/transcribe.service");
 const { summarizeWithClaude, ClaudeAuthError } = require("../services/claude.service");
 const { recordToNotionDirect } = require("../services/notion.service");
 const { processMeeting, pendingRecordings } = require("../services/pipeline");
@@ -172,17 +173,7 @@ async function handleInteraction(interaction) {
       connection.receiver.speaking.on("start", async (userId) => {
         if (!state.isRecording) return;
 
-        let displayName = state.userNames.get(userId);
-        if (!displayName) {
-          try {
-            const member = await interaction.guild.members.fetch(userId);
-            displayName = member.displayName;
-            state.userNames.set(userId, displayName);
-          } catch (e) {
-            displayName = userId;
-          }
-        }
-
+        const displayName = await resolveDisplayName(userId, interaction.guild);
         state.currentMeetingParticipants.add(displayName);
         console.log(`${displayName}(${userId})님이 말하기 시작함`);
 

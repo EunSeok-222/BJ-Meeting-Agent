@@ -88,7 +88,7 @@ NOTION_USER_MAPPING={"이름":"노션_유저_ID", ...}
 
 # --- 선택 ---
 # NOTION_USER_ID_MAPPING={"디스코드_userId":"노션_유저_ID", ...}   # 이름보다 우선 적용, 표시명 바뀌어도 안전
-# DISCORD_NAME_MAPPING={"디스코드_userId":"표시명", ...}          # scripts/recover.js 가 화자 이름 해석에 사용
+# DISCORD_NAME_MAPPING={"디스코드_userId":"표시명", ...}          # 회의록에 쓸 화자 이름 강제 (닉네임이 "Peng"이어도 "김영철"로)
 # CLAUDE_BIN=C:\Users\<사용자>\AppData\Roaming\npm\claude.cmd     # claude 실행이 안 될 때만
 # AUTO_EXIT_MINUTES=10        # 회의 처리 후 자동 종료까지 대기(분). 0이면 자동 종료 안 함
 # SAFETY_IDLE_HOURS=3         # 유휴 상태 이 시간 지나면 종료. 0이면 안전 타이머 끔
@@ -105,7 +105,7 @@ NOTION_USER_MAPPING={"이름":"노션_유저_ID", ...}
 | `BJ_NOTION_DATABASE_ID` | 회의록을 저장할 노션 데이터베이스(Data Source) ID |
 | `NOTION_USER_MAPPING` | 팀원 **이름** → 노션 User ID JSON |
 | `NOTION_USER_ID_MAPPING` | (선택) 디스코드 **userId** → 노션 User ID JSON. 이름 매핑보다 우선 |
-| `DISCORD_NAME_MAPPING` | (선택) 디스코드 **userId** → 표시명 JSON. `scripts/recover.js` 복구 시 화자 이름 |
+| `DISCORD_NAME_MAPPING` | (선택) 디스코드 **userId** → 표시명 JSON. 전사본·요약·복구에서 이 이름을 강제(디스코드 닉네임보다 우선) |
 | `CLAUDE_BIN` | (선택) `claude` 실행 파일 절대경로 |
 | `AUTO_EXIT_MINUTES` / `SAFETY_IDLE_HOURS` | (선택) 자동 종료/안전 타이머 시간 |
 | `WHISPER_MODEL` / `WHISPER_BATCH` / `WHISPER_DEVICE` / `WHISPER_COMPUTE` | (선택) 전사 엔진 튜닝 |

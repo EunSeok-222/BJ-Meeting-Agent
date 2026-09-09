@@ -90,7 +90,14 @@ function mergeSpeakerSegments(segments) {
 
 /* ────────────────────────────── I/O ────────────────────────────── */
 
+// .env DISCORD_NAME_MAPPING (userId -> 표시명). 회의록에 쓸 이름을 강제한다.
+// 예: 디스코드 닉네임이 "Peng" 이어도 회의록에는 "김영철" 로 쓰고 싶을 때.
+const NAME_OVERRIDES = process.env.DISCORD_NAME_MAPPING
+  ? JSON.parse(process.env.DISCORD_NAME_MAPPING)
+  : {};
+
 async function resolveDisplayName(userId, guild) {
+  if (NAME_OVERRIDES[userId]) return NAME_OVERRIDES[userId]; // 오버라이드 최우선
   if (state.userNames.has(userId)) return state.userNames.get(userId);
   if (guild) {
     try {
@@ -292,6 +299,7 @@ async function transcribeMeeting(pcmFiles, recordingsDir, guild, onProgress) {
 
 module.exports = {
   transcribeMeeting,
+  resolveDisplayName,
   // 순수 함수 (테스트용)
   parseTrackFilename,
   buildBurstOffsets,

@@ -31,7 +31,7 @@ const KNOWN_NAMES = process.env.DISCORD_NAME_MAPPING
       "433873045158101014": "이은석",
       "1141980484671389707": "송수빈",
       "1284880963070984216": "이신지",
-      "301702495938543616": "Peng",
+      "301702495938543616": "김영철", // 디스코드 닉네임은 "Peng"
     };
 
 const RECORDINGS_DIR = path.join(__dirname, "..", "recordings");
