@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 recordings/*
 !recordings/.gitkeep
+recovered/
 *.wav
 *.pcm
 meeting_summary.mp3
