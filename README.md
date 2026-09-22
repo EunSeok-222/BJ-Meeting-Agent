@@ -43,7 +43,7 @@
 ## 기술 스택
 * **Runtime**: Node.js, Python (가상환경 `.venv`)
 * **Library**: `discord.js`, `@discordjs/voice`, `prism-media`
-* **STT**: `faster-whisper` (CTranslate2 / CUDA)
+* **STT**: `faster-whisper` (CTranslate2 / CUDA, Windows) / `mlx-whisper` (Apple MLX / Metal, macOS) — 자동 분기
 * **AI 요약**: `claude` CLI (Claude Code)
 * **Tools**: `FFmpeg` (via `ffmpeg-static`), `@notionhq/client`
 
@@ -51,10 +51,11 @@
 ```
 bookjob-ai-bot/
 ├── index.js                          # 엔트리 포인트 (봇 초기화 및 이벤트 바인딩)
-├── start-bot.bat                     # 바탕화면 더블클릭 실행용 런처
+├── start-bot.bat                     # Windows 실행 런처
+├── start-bot.sh                      # macOS/Linux 실행 런처
 ├── scripts/
-│   ├── setup.md                      # 최초 1회 세팅 가이드
-│   ├── transcribe.py                 # faster-whisper 래퍼 (WAV → 세그먼트 JSON)
+│   ├── setup.md                      # 최초 1회 세팅 가이드 (Windows/macOS)
+│   ├── transcribe.py                 # 전사 래퍼 (faster-whisper/mlx-whisper 자동 분기, WAV → 세그먼트 JSON)
 │   └── recover.js                    # 봇이 꺼진 뒤 recordings/ 잔여 조각으로 회의 복구
 ├── test/                             # node:test 순수 함수 스위트
 ├── src/
@@ -116,6 +117,23 @@ NOTION_USER_MAPPING={"이름":"노션_유저_ID", ...}
 ### 실행
 - **평상시**: 바탕화면 `회의봇 시작` 아이콘(= `start-bot.bat`) 더블클릭
 - **터미널**: `npm start`
+
+## 플랫폼별 세팅 · 성능
+
+`scripts/transcribe.py`가 실행 시점에 OS/칩을 자동 감지해 전사 엔진을 고른다(`WHISPER_BACKEND`로 강제 지정 가능). 세팅 방법은 [`scripts/setup.md`](scripts/setup.md)에 플랫폼별로 정리되어 있다.
+
+| 항목 | Windows (NVIDIA GPU) | macOS (Apple Silicon, 예: M1 Pro) |
+|:---|:---|:---|
+| 전사 엔진 | `faster-whisper` (CTranslate2, CUDA) | `mlx-whisper` (Apple MLX, Metal GPU) |
+| GPU 필요 여부 | **NVIDIA GPU 필요** (CUDA). 없으면 `WHISPER_DEVICE=cpu`로 CPU 폴백 가능하나 매우 느림 | GPU 불필요 — Apple Silicon 통합 GPU를 mlx-whisper가 자동으로 씀 |
+| 실행 스크립트 | `start-bot.bat` (더블클릭) | `start-bot.sh` (`chmod +x` 후 `./start-bot.sh`) |
+| Python venv 경로 | `.venv\Scripts\python.exe` | `.venv/bin/python` (`.env`에 `PYTHON_BIN` 지정) |
+| 체감 전사 속도 | 가장 빠름 (실시간의 여러 배속) | Windows GPU보다 느리지만 CPU 전용보다는 확실히 빠름. 회의가 길고 인원이 많을수록 `/회의종료` 후 대기시간 체감 증가 |
+| 정확도 | 동일 (같은 계열 Whisper 모델) | 동일 |
+
+> Windows에 NVIDIA GPU가 없는 경우, Mac과 마찬가지로 `faster-whisper`를 CPU 모드(`WHISPER_DEVICE=cpu`, `WHISPER_COMPUTE=int8`)로 돌릴 수 있지만 권장하지 않는다(느림). 반대로 Mac에서 mlx-whisper가 불안정하면 `WHISPER_BACKEND=faster-whisper`로 되돌려 CPU 모드로 쓸 수 있다.
+
+`.env`, Discord/Notion 설정은 두 플랫폼이 완전히 동일하다(전사 엔진 관련 변수만 다름). `.env`는 Git에 올라가지 않으므로 새 기기에서 쓰려면 기존 `.env`를 직접 복사해야 한다.
 
 ## 슬래시 커맨드
 
