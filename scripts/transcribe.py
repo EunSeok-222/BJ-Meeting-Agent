@@ -1,5 +1,8 @@
 """
-faster-whisper 래퍼.
+Whisper 전사 래퍼. 플랫폼에 맞춰 백엔드를 자동 선택한다.
+    - Windows(NVIDIA GPU 등): faster-whisper (CUDA/CPU)
+    - macOS Apple Silicon: mlx-whisper (Apple GPU/Metal)
+WHISPER_BACKEND 환경변수로 강제 지정 가능: auto(기본) / faster-whisper / mlx
 
 사용법:
     python transcribe.py <wav 파일 1> [<wav 파일 2> ...]
@@ -15,6 +18,7 @@ faster-whisper 래퍼.
 
 import json
 import os
+import platform
 import sys
 
 # Windows 기본 stdout 인코딩(cp949)이면 Node가 UTF-8로 읽을 때 한글이 깨진다.
@@ -37,11 +41,25 @@ DEVICE = os.environ.get("WHISPER_DEVICE", "cuda")          # 폴백: "cpu"
 COMPUTE_TYPE = os.environ.get("WHISPER_COMPUTE", "float16")  # 폴백: "int8_float16" 또는 "int8"
 LANGUAGE = os.environ.get("WHISPER_LANG", "ko")
 BATCH_SIZE = int(os.environ.get("WHISPER_BATCH", "8"))     # 0 이면 배치 파이프라인 비활성화
+
+# mlx-whisper용 HF 저장소. 기본값은 WHISPER_MODEL을 mlx-community 네이밍으로 매핑.
+MLX_MODEL = os.environ.get("MLX_MODEL", f"mlx-community/whisper-{MODEL_SIZE}")
+
+# auto: macOS(Apple Silicon)면 mlx, 그 외(Windows/Linux)면 faster-whisper
+BACKEND = os.environ.get("WHISPER_BACKEND", "auto")
 # --------------------------------------------------------------------------- -
 
 
 def log(*args):
     print(*args, file=sys.stderr, flush=True)
+
+
+def resolve_backend():
+    if BACKEND != "auto":
+        return BACKEND
+    if platform.system() == "Darwin" and platform.machine() == "arm64":
+        return "mlx"
+    return "faster-whisper"
 
 
 def register_cuda_dlls():
@@ -74,12 +92,7 @@ def register_cuda_dlls():
         log(f"CUDA DLL 경로 등록: {', '.join(added)}")
 
 
-def main():
-    wav_paths = sys.argv[1:]
-    if not wav_paths:
-        log("에러: 전사할 WAV 파일 경로를 하나 이상 넘겨주세요.")
-        sys.exit(2)
-
+def transcribe_via_faster_whisper(wav_paths):
     if DEVICE == "cuda":
         register_cuda_dlls()
 
@@ -94,7 +107,7 @@ def main():
         log("에러: faster-whisper가 설치되지 않았습니다. scripts/setup.md 를 참고해 설치하세요.")
         sys.exit(1)
 
-    log(f"Whisper 모델 로딩: {MODEL_SIZE} (device={DEVICE}, compute_type={COMPUTE_TYPE})")
+    log(f"Whisper 모델 로딩(faster-whisper): {MODEL_SIZE} (device={DEVICE}, compute_type={COMPUTE_TYPE})")
     try:
         model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
     except Exception as e:  # noqa: BLE001
@@ -141,6 +154,65 @@ def main():
             seg_list = []
         log(f"전사 완료 ({idx}/{total}): {abspath} (구간 {len(seg_list)}개)")
         results.append({"file": abspath, "segments": seg_list})
+
+    return results
+
+
+def transcribe_via_mlx(wav_paths):
+    try:
+        import mlx_whisper
+    except ImportError:
+        log("에러: mlx-whisper가 설치되지 않았습니다. `pip install mlx-whisper` 후 다시 시도하세요.")
+        log("(mlx-whisper는 Apple Silicon 전용입니다. Windows/Intel Mac에서는 사용 불가.)")
+        sys.exit(1)
+
+    log(f"Whisper 모델 로딩(mlx-whisper): {MLX_MODEL} (device=metal)")
+
+    results = []
+    total = len(wav_paths)
+    for idx, wav in enumerate(wav_paths, 1):
+        abspath = os.path.abspath(wav)
+        if not os.path.exists(abspath):
+            log(f"경고: 파일 없음, 건너뜀 -> {abspath}")
+            results.append({"file": abspath, "segments": []})
+            continue
+
+        log(f"전사 시작 ({idx}/{total}): {abspath}")
+        try:
+            result = mlx_whisper.transcribe(
+                abspath, path_or_hf_repo=MLX_MODEL, language=LANGUAGE
+            )
+            seg_list = []
+            for s in result.get("segments", []):
+                text = (s.get("text") or "").strip()
+                if not text:
+                    continue
+                seg_list.append(
+                    {"start": round(s["start"], 3), "end": round(s["end"], 3), "text": text}
+                )
+        except Exception as e:  # noqa: BLE001
+            # 한 파일이 실패해도 나머지는 계속 처리한다 (긴 회의 부분 손실 방지)
+            log(f"전사 실패 ({idx}/{total}), 건너뜀: {abspath} ({e})")
+            seg_list = []
+        log(f"전사 완료 ({idx}/{total}): {abspath} (구간 {len(seg_list)}개)")
+        results.append({"file": abspath, "segments": seg_list})
+
+    return results
+
+
+def main():
+    wav_paths = sys.argv[1:]
+    if not wav_paths:
+        log("에러: 전사할 WAV 파일 경로를 하나 이상 넘겨주세요.")
+        sys.exit(2)
+
+    backend = resolve_backend()
+    log(f"전사 백엔드: {backend} (WHISPER_BACKEND={BACKEND})")
+
+    if backend == "mlx":
+        results = transcribe_via_mlx(wav_paths)
+    else:
+        results = transcribe_via_faster_whisper(wav_paths)
 
     json.dump(results, sys.stdout, ensure_ascii=False)
     sys.stdout.flush()

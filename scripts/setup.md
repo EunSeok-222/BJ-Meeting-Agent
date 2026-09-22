@@ -96,17 +96,19 @@ NVIDIA GPU가 없는 Mac(M1/M2/M3 등)에서는 CUDA를 쓸 수 없다. faster-w
    npm install
    ```
 
-2. Python 가상환경 + faster-whisper (CUDA 패키지는 설치하지 않는다)
+2. Python 가상환경 + mlx-whisper (Apple Silicon GPU/Metal 사용)
    ```bash
    python3 -m venv .venv
    ./.venv/bin/pip install --upgrade pip
-   ./.venv/bin/pip install faster-whisper
+   ./.venv/bin/pip install mlx-whisper
    ```
+   `scripts/transcribe.py`가 실행 시점에 OS/칩을 자동 감지해서
+   macOS(Apple Silicon)면 mlx-whisper, 그 외(Windows 등)면 faster-whisper를
+   자동으로 선택한다 (`WHISPER_BACKEND` 환경변수로 강제 지정도 가능: `mlx` / `faster-whisper`).
+   따로 `WHISPER_DEVICE`/`WHISPER_COMPUTE` 설정은 필요 없다.
 
-3. `.env`에 CPU 폴백 설정 추가
+3. `.env`에서 `PYTHON_BIN` 확인/추가 (venv 경로가 Windows와 다르므로)
    ```
-   WHISPER_DEVICE=cpu
-   WHISPER_COMPUTE=int8
    PYTHON_BIN=./.venv/bin/python
    ```
 
@@ -114,7 +116,8 @@ NVIDIA GPU가 없는 Mac(M1/M2/M3 등)에서는 CUDA를 쓸 수 없다. faster-w
    ```bash
    ./.venv/bin/python scripts/transcribe.py sample.wav
    ```
-   stderr에 `device=cpu` 로그가 보이고 마지막에 JSON이 출력되면 성공.
+   stderr에 `전사 백엔드: mlx` 로그가 보이고 마지막에 JSON이 출력되면 성공.
+   최초 실행 시 모델(HF `mlx-community/whisper-large-v3-turbo`)을 자동 다운로드한다.
 
 5. `claude` CLI를 Mac에도 별도로 설치 후 로그인 (Windows와 별개 세션)
    ```bash
@@ -127,6 +130,17 @@ NVIDIA GPU가 없는 Mac(M1/M2/M3 등)에서는 CUDA를 쓸 수 없다. faster-w
    ./start-bot.sh
    ```
 
-**성능 참고**: PC(GPU, float16)는 실시간의 여러 배속으로 전사되지만, M1 Pro(CPU, int8)는
-대략 실시간과 비슷하거나 조금 빠른 정도다. 회의가 길고 참석자가 많을수록 `/회의종료` 후
-요약이 나오기까지 체감 대기시간이 늘어난다. 정확도는 동일 모델이라 차이 없음.
+**성능 참고**: PC(NVIDIA GPU, CUDA)가 가장 빠르다. M1 Pro는 mlx-whisper로 Apple GPU(Metal)를
+쓰기 때문에 CPU 전사보다는 확실히 빠르지만, 그래도 PC의 CUDA 가속만큼은 아니다. 정확도는
+동일 계열 모델이라 차이 없음.
+
+**faster-whisper로 되돌리고 싶으면(mlx가 불안정할 때)**:
+```bash
+./.venv/bin/pip install faster-whisper
+```
+`.env`에 아래를 추가:
+```
+WHISPER_BACKEND=faster-whisper
+WHISPER_DEVICE=cpu
+WHISPER_COMPUTE=int8
+```
