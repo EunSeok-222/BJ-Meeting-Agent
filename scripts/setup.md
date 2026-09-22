@@ -85,3 +85,48 @@ CLAUDE_BIN=C:\Users\dldms\AppData\Roaming\npm\claude.cmd
   - `/봇종료` 또는 콘솔에서 `Ctrl+C` → 남은 녹음을 정리(전사→요약→노션)한 뒤 종료
   - 콘솔 창을 X로 닫아 정리가 안 됐으면 → `node scripts/recover.js` 실행 (`recordings/` 잔여 조각으로 복구)
 - 팀원이 바뀌면 `.env` 의 `DISCORD_NAME_MAPPING`(userId→이름), `NOTION_USER_ID_MAPPING`(userId→노션ID) 수정
+
+## macOS (Apple Silicon) 세팅
+
+NVIDIA GPU가 없는 Mac(M1/M2/M3 등)에서는 CUDA를 쓸 수 없다. faster-whisper는 CPU로 돈다
+(Metal/MPS 가속 미지원). 속도는 GPU 대비 느리지만 동작은 동일하다.
+
+1. Node 의존성 (Xcode Command Line Tools 필요할 수 있음: `xcode-select --install`)
+   ```bash
+   npm install
+   ```
+
+2. Python 가상환경 + faster-whisper (CUDA 패키지는 설치하지 않는다)
+   ```bash
+   python3 -m venv .venv
+   ./.venv/bin/pip install --upgrade pip
+   ./.venv/bin/pip install faster-whisper
+   ```
+
+3. `.env`에 CPU 폴백 설정 추가
+   ```
+   WHISPER_DEVICE=cpu
+   WHISPER_COMPUTE=int8
+   PYTHON_BIN=./.venv/bin/python
+   ```
+
+4. 전사 동작 확인
+   ```bash
+   ./.venv/bin/python scripts/transcribe.py sample.wav
+   ```
+   stderr에 `device=cpu` 로그가 보이고 마지막에 JSON이 출력되면 성공.
+
+5. `claude` CLI를 Mac에도 별도로 설치 후 로그인 (Windows와 별개 세션)
+   ```bash
+   claude -p "안녕" --output-format json
+   ```
+
+6. 실행: `start-bot.bat` 대신 `start-bot.sh` 사용
+   ```bash
+   chmod +x start-bot.sh   # 최초 1회
+   ./start-bot.sh
+   ```
+
+**성능 참고**: PC(GPU, float16)는 실시간의 여러 배속으로 전사되지만, M1 Pro(CPU, int8)는
+대략 실시간과 비슷하거나 조금 빠른 정도다. 회의가 길고 참석자가 많을수록 `/회의종료` 후
+요약이 나오기까지 체감 대기시간이 늘어난다. 정확도는 동일 모델이라 차이 없음.
